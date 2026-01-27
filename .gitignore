@@ -1,0 +1,53 @@
+
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+## VStudio
+.vs/
+build_output.txt
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa]rm/
+[Aa]rm64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Gg]enerated/
+
+## Test Results
+TestResults/
+*.trx
+*.coverage
+
+## Package files
+*.nupkg
+*.snupkg
+*.oxt
+
+## Rider
+.idea/
+
+## User-specific files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+## Logs
+*.log

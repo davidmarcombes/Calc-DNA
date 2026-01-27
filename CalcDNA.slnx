@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="src/CalcDNA.Attributes/CalcDNA.Attributes.csproj" />
+  <Project Path="src/CalcDNA.Runtime/CalcDNA.Runtime.csproj" />
+
+  <Project Path="src/CalcDNA.Generator/CalcDNA.Generator.csproj" />
+  <Project Path="src/CalcDNA.CLI/CalcDNA.CLI.csproj" />
+
+  <Project Path="src/Demo.App/Demo.App.csproj" />
+</Solution>

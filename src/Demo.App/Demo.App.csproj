@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+	  <!-- Reference the Runtime project -->
+	  <ProjectReference Include="..\CalcDNA.Runtime\CalcDNA.Runtime.csproj" />
+	  <!-- Reference the Attributes project -->
+    <ProjectReference Include="..\CalcDNA.Attributes\CalcDNA.Attributes.csproj" />
+	  <!-- Reference the Generator as an Analyzer -->
+    <ProjectReference Include="..\CalcDNA.Generator\CalcDNA.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- Optional-Start Physical Output of generated files -->
+  <!-- Emit compiler generated files -->
+  <PropertyGroup>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
+  </PropertyGroup>
+
+  <!-- Exclude compiler generated files from the build -->
+  <ItemGroup>
+    <Compile Remove="$(CompilerGeneratedFilesOutputPath)/**/*.cs" />
+  </ItemGroup>
+  <!-- Optional-End Physical Output of generated files -->
+
+</Project>
