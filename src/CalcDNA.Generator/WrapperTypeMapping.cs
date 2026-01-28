@@ -131,11 +131,74 @@ public static class WrapperTypeMapping
         {
             var defaultValue = parameter.ExplicitDefaultValue; 
 
-            // Get the default value for the underlying type
-            if (specialType == SpecialType.System_Double)
+            if (specialType == specialType.System_Boolean)
+                return $"UnoMarshal.UnwrapOptionalBool({parameter.Name}, {defaultValue?? false})";
+            else if (specialType == specialType.System_SByte)
+                return $"UnoMarshal.UnwrapOptionalSByte({parameter.Name}, {defaultValue?? 0})";
+            else if (specialType == specialType.System_Int16)
+                return $"UnoMarshal.UnwrapOptionalShort({parameter.Name}, {defaultValue?? 0})";
+            else if (specialType == specialType.System_Int32)
+                return $"UnoMarshal.UnwrapOptionalInt({parameter.Name}, {defaultValue?? 0})";
+            else if (specialType == specialType.System_Int64)
+                return $"UnoMarshal.UnwrapOptionalLong({parameter.Name}, {defaultValue?? 0})";
+            else if (specialType == specialType.System_Single)
+                return $"UnoMarshal.UnwrapOptionalFloat({parameter.Name}, {defaultValue?? 0.0f})";
+            else if (specialType == SpecialType.System_Double)
                 return $"UnoMarshal.UnwrapOptionalDouble({parameter.Name}, {defaultValue?? 0.0})";
+            else if (specialType == specialType.System_Char)
+                return $"UnoMarshal.UnwrapOptionalChar({parameter.Name}, {defaultValue?? '\0'})";
+            else if (specialType == specialType.System_String)
+                return $"UnoMarshal.UnwrapOptionalString({parameter.Name}, {defaultValue?? ""})";
+            else if (specialType == specialType.System_Object)
+                return $"UnoMarshal.UnwrapOptionalObject({parameter.Name}, {defaultValue?? null})";
+            else if (specialType == specialType.System_Array)
+            {
+                var elementType = typeSymbol.ElementType;
+                var dimension = typeSymbol.Rank;
+                if (dimension == 1)
+                    return $"UnoMarshal.UnwrapOptionalArray({parameter.Name}, {defaultValue?? null})";
+                else if (dimension == 2)
+                    return $"UnoMarshal.UnwrapOptionalArray2D({parameter.Name}, {defaultValue?? null})";
+                else
+                    throw new NotSupportedException($"Array of dimension {dimension} is not supported.");
+            }
+            else if (specialType.N  ame == "CalcRange" && specialType.ContainingNamespace?.ToDisplayString() == "CalcDNA.Runtime")
+            {
+                return $"UnoMarshal.UnwrapOptionalCalcRange({parameter.Name}, {defaultValue?? null})";
+            }
+            else if (specialType == specialType.System_Collections.Generic.List)
+            {
+                var elementType = typeSymbol.ElementType;
+                return $"UnoMarshal.UnwrapOptionalList({parameter.Name}, {defaultValue?? null})";
+            }
             else
                 throw new NotSupportedException($"Optional parameter of type {typeSymbol} is not supported.");
+        }
+        else
+        {
+            if( specialType == SpecialType.System_Array)
+            {
+                var elementType = typeSymbol.ElementType;
+                var dimension = typeSymbol.Rank;
+                if (dimension == 1)
+                    return $"UnoMarshal.To1DArray<{elementType.Name}>({parameter.Name})";
+                else if (dimension == 2)
+                    return $"UnoMarshal.To2DArray<{elementType.Name}>({parameter.Name})";
+                else
+                    throw new NotSupportedException($"Array of dimension {dimension} is not supported.");
+            }
+            else if (specialType.N  ame == "CalcRange" && specialType.ContainingNamespace?.ToDisplayString() == "CalcDNA.Runtime")
+            {
+                return $"UnoMarshal.ToCalcRange({parameter.Name})";
+            }
+            else if (specialType == specialType.System_Collections.Generic.List)
+            {
+                var elementType = typeSymbol.ElementType;
+                return $"UnoMarshal.ToList<{elementType.Name}>({parameter.Name})";
+            }
+            else
+                throw new NotSupportedException($"Optional parameter of type {typeSymbol} is not supported.");
+            
         }
 
         throw new NotSupportedException($"Marshaling for type {typeSymbol.Name} is not supported.");

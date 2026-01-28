@@ -106,7 +106,7 @@ public class CalcWrapperGenerator : IIncrementalGenerator
             {
                 paramMarschal.AppendLine( $"{tab}var marshaled_{parameter.Name} = {WrapperTypeMapping.GetMarshalingCode( parameter )};" );
                 paramLList.Append( $"{sep}marshaled_{parameter.Name}" );
-                tab = "            ";
+                tab = "                ";
             } else {
                 paramLList.Append( $"{sep}{parameter.Name}" );
             }
@@ -117,6 +117,8 @@ public class CalcWrapperGenerator : IIncrementalGenerator
         }
 
 
+        // TODO: Should throw a UNO exception instead of a C# exception
+
         // This is where you write the C# text for the wrapper class
         return $@"
 using CalcDNA.Runtime;
@@ -126,8 +128,15 @@ namespace {method.ContainingNamespace} {{
         // Method: {method.Name}
         public static {returnType} {method.Name}_UNOWrapper({parameters})
         {{
-            {paramMarschal}
-            return {method.Name}({paramLList});
+            try 
+            {{
+                {paramMarschal}
+                return {method.Name}({paramLList});
+            }}
+            catch (Exception ex)
+            {{
+                    throw new Exception($"Error calling {method.Name}: {ex.Message}");
+            }}
         }}
     }}
 }}";

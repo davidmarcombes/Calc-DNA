@@ -1,5 +1,6 @@
 using System;
 
+
 namespace CalcDNA.Attributes
 {
     [AttributeUsage(AttributeTargets.Parameter, Inherited = false, AllowMultiple = false)]

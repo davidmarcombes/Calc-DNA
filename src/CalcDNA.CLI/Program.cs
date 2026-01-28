@@ -32,10 +32,12 @@ class Program
 
         // 3. Process classes with [CalcAddIn]
         var addInClasses = assembly.GetTypes()
-            .Where(t => t.GetCustomAttributesData().Any(a => a.AttributeType.Name == "CalcAddInAttribute"));
+            .Where(t => t.GetCustomAttributesData().Any(
+                a => a.AttributeType.Name == "CalcAddInAttribute" || a.AttributeType.Name == "CalcAddIn"));
 
         foreach (var type in addInClasses)
         {
+            // TODO: Not sure if we need to generate metadata for each class or just once
             GenerateMetadata(type, outputDir);
         }
     }
@@ -59,49 +61,12 @@ class Program
     static string BuildXcu(Type type, IEnumerable<MethodInfo> methods)
     {
         // Generate the XML structure for the Function Wizard
-        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>...";
-    }
-
-    static string MapTypeToUno(Type type)
-    {
-        // Handle 2D Arrays (Calc Ranges)
-        if (type.IsArray && type.GetArrayRank() == 2)
-        {
-            var elementType = type.GetElementType();
-            return $"sequence< sequence< {MapTypeToUno(elementType)} > >";
-        }
-
-        // Standard mappings
-        return type.Name switch
-        {
-            "Double"  => "double",
-            "Int32"   => "long",
-            "String"  => "string",
-            "Boolean" => "boolean",
-            "Object"  => "any",
-            _         => throw new NotSupportedException($"Type {type.Name} not supported for Calc UDFs.")
-        };
+        return XcuGenerator .Generate(type, methods);
     }
 
     static string BuildIdl(Type type, IEnumerable<MethodInfo> methods)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine("#include <com/sun/star/uno/XInterface.idl>");
-        sb.AppendLine("module my_namespace {");
-        sb.AppendLine($"    interface X{type.Name} {{");
-
-        foreach (var method in methods)
-        {
-            var unoReturn = MapTypeToUno(method.ReturnType);
-            var parameters = method.GetParameters()
-                .Select(p => $"[in] {MapTypeToUno(p.ParameterType)} {p.Name}");
-
-            sb.AppendLine($"        {unoReturn} {method.Name}( {string.Join(", ", parameters)} );");
-        }
-
-        sb.AppendLine("    };");
-        sb.AppendLine("};");
-        return sb.ToString();
+        return IdlGenerator.BuildIdl(type, methods);
     }
 
 }
