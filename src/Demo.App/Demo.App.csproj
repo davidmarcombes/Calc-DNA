@@ -4,16 +4,23 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- Set to true to generate IDL and XCU files after build -->
+    <GenerateCalcMetadata>true</GenerateCalcMetadata>
   </PropertyGroup>
+
   <ItemGroup>
-	  <!-- Reference the Runtime project -->
-	  <ProjectReference Include="..\CalcDNA.Runtime\CalcDNA.Runtime.csproj" />
-	  <!-- Reference the Attributes project -->
+    <!-- Reference the Runtime project -->
+    <ProjectReference Include="..\CalcDNA.Runtime\CalcDNA.Runtime.csproj" />
+    <!-- Reference the Attributes project -->
     <ProjectReference Include="..\CalcDNA.Attributes\CalcDNA.Attributes.csproj" />
-	  <!-- Reference the Generator as an Analyzer -->
+    <!-- Reference the Generator as an Analyzer -->
     <ProjectReference Include="..\CalcDNA.Generator\CalcDNA.Generator.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />
+    <!-- Reference CLI project (for build ordering, not runtime) -->
+    <ProjectReference Include="..\CalcDNA.CLI\CalcDNA.CLI.csproj"
+                      ReferenceOutputAssembly="false"
+                      Private="false" />
   </ItemGroup>
 
   <!-- Optional-Start Physical Output of generated files -->
@@ -28,5 +35,20 @@
     <Compile Remove="$(CompilerGeneratedFilesOutputPath)/**/*.cs" />
   </ItemGroup>
   <!-- Optional-End Physical Output of generated files -->
+
+  <!-- Generate IDL and XCU metadata files after build -->
+  <Target Name="GenerateCalcDNAMetadata" AfterTargets="Build" Condition="'$(GenerateCalcMetadata)' == 'true'">
+    <PropertyGroup>
+      <CalcDNACLIPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\CalcDNA.CLI\bin\$(Configuration)\net10.0\CalcDNA.CLI.dll'))</CalcDNACLIPath>
+      <TargetAssemblyPath>$(TargetDir)$(TargetFileName)</TargetAssemblyPath>
+      <!-- Remove trailing slash from TargetDir for proper quoting -->
+      <OutputDirNoSlash>$(TargetDir.TrimEnd('\'))</OutputDirNoSlash>
+    </PropertyGroup>
+    <Message Importance="high" Text="Generating CalcDNA metadata for $(TargetFileName)..." />
+    <Exec Command="dotnet &quot;$(CalcDNACLIPath)&quot; &quot;$(TargetAssemblyPath)&quot; &quot;$(OutputDirNoSlash)&quot;"
+          ConsoleToMSBuild="true"
+          StandardOutputImportance="normal" />
+    <Message Importance="high" Text="Generated IDL, RDB and XCU files in $(TargetDir)" />
+  </Target>
 
 </Project>

@@ -51,3 +51,6 @@ TestResults/
 
 ## Logs
 *.log
+
+## Claude
+.claude/

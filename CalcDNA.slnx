@@ -1,9 +1,14 @@
 <Solution>
-  <Project Path="src/CalcDNA.Attributes/CalcDNA.Attributes.csproj" />
-  <Project Path="src/CalcDNA.Runtime/CalcDNA.Runtime.csproj" />
 
-  <Project Path="src/CalcDNA.Generator/CalcDNA.Generator.csproj" />
-  <Project Path="src/CalcDNA.CLI/CalcDNA.CLI.csproj" />
-
-  <Project Path="src/Demo.App/Demo.App.csproj" />
+  <Folder Name="/tests/">
+    <Project Path="tests/CalcDNA.Generator.Tests/CalcDNA.Generator.Tests.csproj" />
+    <Project Path="tests/CalcDNA.Runtime.Tests/CalcDNA.Runtime.Tests.csproj" />
+  </Folder>  
+  <Folder Name="/src/">
+    <Project Path="src/CalcDNA.Attributes/CalcDNA.Attributes.csproj" />
+    <Project Path="src/CalcDNA.Runtime/CalcDNA.Runtime.csproj" />
+    <Project Path="src/CalcDNA.Generator/CalcDNA.Generator.csproj" />
+    <Project Path="src/CalcDNA.CLI/CalcDNA.CLI.csproj" />
+    <Project Path="src/Demo.App/Demo.App.csproj" />
+  </Folder>  
 </Solution>
