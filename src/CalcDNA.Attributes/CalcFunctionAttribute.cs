@@ -27,6 +27,21 @@ namespace CalcDNA.Attributes
         public string Category { get; set; } = "Add-In";
 
         /// <summary>
+        /// Gets or sets a URL to a help page for this function.
+        /// </summary>
+        public string HelpUrl { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether the function is volatile (recalculated on every sheet change).
+        /// </summary>
+        public bool IsVolatile { get; set; }
+
+        /// <summary>
+        /// Gets or sets a compatibility name for this function (e.g., used for Excel interoperability).
+        /// </summary>
+        public string CompatibilityName { get; set; }
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="CalcFunctionAttribute"/> class.
         /// </summary>
         public CalcFunctionAttribute() { }

@@ -3,10 +3,22 @@ namespace CalcDNA.CLI;
 /// <summary>
 /// Maps .NET types to UNO IDL types for LibreOffice Calc add-in generation.
 /// </summary>
-public static class UNOTypeMapping
+public static class UnoTypeMapping
 {
+    private const int MaxRecursionDepth = 5;
+
     public static string MapTypeToUno(Type type)
     {
+        return MapTypeToUnoInternal(type, 0);
+    }
+
+    private static string MapTypeToUnoInternal(Type type, int depth)
+    {
+        if (depth > MaxRecursionDepth)
+        {
+            throw new NotSupportedException($"Type nesting too deep: {type.FullName ?? type.Name}");
+        }
+
         // Note: We use name-based checks because MetadataLoadContext loads types
         // from a different context, so direct typeof() comparisons fail.
 
@@ -22,7 +34,7 @@ public static class UNOTypeMapping
             var elementType = type.GetElementType();
             if (elementType is null)
                 throw new NotSupportedException($"Type {type.Name} not supported for Calc UDFs.");
-            return $"sequence< {MapTypeToUno(elementType)} >";
+            return $"sequence< {MapTypeToUnoInternal(elementType, depth + 1)} >";
         }
 
         // Handle 2D Arrays -> sequence<sequence<T>>
@@ -31,18 +43,18 @@ public static class UNOTypeMapping
             var elementType = type.GetElementType();
             if (elementType is null)
                 throw new NotSupportedException($"Type {type.Name} not supported for Calc UDFs.");
-            return $"sequence< sequence< {MapTypeToUno(elementType)} > >";
+            return $"sequence< sequence< {MapTypeToUnoInternal(elementType, depth + 1)} > >";
         }
 
         // Handle List<T> -> sequence<T>
-        if (type.IsGenericType && IsGenericTypeDefinition(type, "System.Collections.Generic.List`1"))
+        if (type.IsGenericType && (IsGenericTypeDefinition(type, "System.Collections.Generic.List`1") || IsGenericTypeDefinition(type, "System.Collections.Generic.IEnumerable`1")))
         {
             var elementType = type.GetGenericArguments()[0];
-            return $"sequence< {MapTypeToUno(elementType)} >";
+            return $"sequence< {MapTypeToUnoInternal(elementType, depth + 1)} >";
         }
 
         // Handle CalcRange -> sequence<sequence<any>>
-        if (type.Name == "CalcRange" && type.Namespace == "CalcDNA.Runtime")
+        if (type.Name == "CalcRange" && (type.Namespace == "CalcDNA.Runtime" || type.FullName?.Contains("CalcRange") == true))
         {
             return "sequence< sequence< any > >";
         }
@@ -67,6 +79,7 @@ public static class UNOTypeMapping
             "Char"    => "char",        // UNO: 16-bit Unicode
             "String"  => "string",      // UNO: Unicode string
             "Object"  => "any",         // UNO: variant type
+            "Decimal" => "double",      // Map Decimal to double for Calc interaction
             _         => throw new NotSupportedException($"Type '{type.FullName ?? type.Name}' is not supported for Calc UDFs.")
         };
     }
@@ -78,7 +91,17 @@ public static class UNOTypeMapping
     private static bool IsGenericTypeDefinition(Type type, string expectedFullName)
     {
         if (!type.IsGenericType) return false;
-        var genericDef = type.GetGenericTypeDefinition();
-        return genericDef.FullName == expectedFullName;
+        try
+        {
+            var genericDef = type.GetGenericTypeDefinition();
+            var fullName = genericDef.FullName;
+            if (fullName == expectedFullName) return true;
+            if (string.IsNullOrEmpty(fullName)) return false;
+            return fullName.Split(',')[0].Trim() == expectedFullName;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

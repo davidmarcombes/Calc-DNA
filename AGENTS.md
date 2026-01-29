@@ -17,8 +17,8 @@ Calc-DNA is a framework for building LibreOffice Calc add-ins using C#, inspired
 - **Language**: C#
 - **Target Platform**: LibreOffice 7.0+ via UNO (Universal Network Objects)
 - **Build System**: MSBuild (.NET SDK-style projects)
-- **IDE**: VS Code with C# Dev Kit or Visual Studio 2026
-- **Testing**: xUnit or NUnit
+- **IDE**: VS Code with C# Dev Kit or Visual Studio 2022+
+- **Testing**: xUnit 
 
 ## Code Style and Conventions
 
@@ -31,8 +31,6 @@ Follow modern C# conventions.
 - File name matches the primary type name
 - Organize using folders/namespaces that reflect purpose
 
-**Formatting:**
-
 ### Documentation
 
 **XML Documentation:**
@@ -41,15 +39,12 @@ All public APIs must have XML documentation
 **Inline Comments:**
 Use for non-obvious logic, UNO-specific quirks, or workarounds
 
-
-
 ### Async/Threading
 
 **Current Scope:**
 - Initial version will be **synchronous only**
 - Calc's calculation model is primarily single-threaded
 - UNO components have specific threading requirements
-
 
 ## UNO-Specific Guidelines
 
@@ -81,129 +76,19 @@ public string GetFunctionName(string programmaticName)
 
 Be explicit about .NET ↔ UNO type conversions:
 
-```csharp
-public class UnoTypeConverter
-{
-    /// <summary>
-    /// Converts a UNO Any to the appropriate .NET type.
-    /// </summary>
-    /// <remarks>
-    /// UNO's Any type is a variant container. We need to inspect
-    /// the Type property to determine what .NET type to return.
-    /// </remarks>
-    public static object? FromUnoAny(uno.Any unoValue)
-    {
-        if (!unoValue.hasValue())
-            return null;
-
-        var unoType = unoValue.Type;
-
-        // Map UNO types to .NET types
-        return unoType.TypeClass switch
-        {
-            uno.TypeClass.DOUBLE => (double)unoValue.Value,
-            uno.TypeClass.STRING => (string)unoValue.Value,
-            uno.TypeClass.LONG => (int)unoValue.Value,
-            // ... more type mappings
-            _ => throw new NotSupportedException(
-                $"UNO type {unoType.TypeClass} not yet supported")
-        };
-    }
-}
-```
-
 ### Component Registration
 
-UNO registration is non-intuitive; document it well:
-
-```csharp
-/// <summary>
-/// Factory method called by LibreOffice to create component instances.
-/// </summary>
-/// <remarks>
-/// This is called by LibreOffice's component loader. The signature must
-/// match exactly what UNO expects. Do not rename or change parameters.
-/// See: https://wiki.openoffice.org/wiki/Uno/Cli
-/// </remarks>
-public static XSingleServiceFactory __getServiceFactory(
-    string implementationName,
-    XMultiServiceFactory multiFactory,
-    XRegistryKey registryKey)
-{
-    // Implementation must return null if implementation name doesn't match
-    if (implementationName != IMPLEMENTATION_NAME)
-        return null;
-
-    return FactoryHelper.getServiceFactory(
-        typeof(CalcDnaComponent),
-        SERVICE_NAME,
-        multiFactory,
-        registryKey);
-}
-```
+UNO registration is non-intuitive; document it well
 
 ## Testing Guidelines
 
 ### Unit Tests
 
-Test business logic without UNO dependencies:
-
-```csharp
-public class FunctionScannerTests
-{
-    [Fact]
-    public void ScanAssembly_FindsFunctionsWithAttribute()
-    {
-        // Arrange
-        var assembly = typeof(TestFunctions).Assembly;
-        var scanner = new FunctionScanner();
-
-        // Act
-        var functions = scanner.ScanAssembly(assembly);
-
-        // Assert
-        Assert.Single(functions);
-        Assert.Equal("TestFunction", functions[0].Name);
-    }
-
-    // Test class in same file for simplicity
-    public static class TestFunctions
-    {
-        [CalcFunction(Name = "TestFunction")]
-        public static double Test(double x) => x * 2;
-    }
-}
-```
+Test business logic without UNO dependencies
 
 ### Integration Tests
 
-Test with actual UNO components:
-
-```csharp
-public class UnoComponentTests : IDisposable
-{
-    private XComponentContext _context;
-
-    public UnoComponentTests()
-    {
-        // Set up UNO context
-        _context = Bootstrap.bootstrap();
-    }
-
-    [Fact]
-    public void Component_ImplementsXAddIn()
-    {
-        var component = new CalcDnaComponent(_context);
-        Assert.IsAssignableFrom<XAddIn>(component);
-    }
-
-    public void Dispose()
-    {
-        // Clean up UNO context
-        _context?.Dispose();
-    }
-}
-```
+Test with actual UNO components
 
 ### Version Compatibility
 

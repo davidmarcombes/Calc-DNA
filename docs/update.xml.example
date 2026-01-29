@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Example update.xml file for LibreOffice extension automatic updates
+  Host this file at the URL specified in your extension's description.xml
+-->
+<description xmlns="http://openoffice.org/extensions/update/2006"
+             xmlns:xlink="http://www.w3.org/1999/xlink">
+
+  <!-- Update information for your extension -->
+  <identifier value="org.calcdna.demo_app" />
+
+  <!-- Version information -->
+  <version value="1.0.1" />
+
+  <!-- Download location for the updated .oxt file -->
+  <update-download>
+    <src xlink:href="https://example.com/calcdna/downloads/Demo_App-1.0.1.oxt" />
+  </update-download>
+
+  <!-- Release notes for this version (optional) -->
+  <release-notes>
+    <src xlink:href="https://example.com/calcdna/releases/v1.0.1.html" lang="en" />
+  </release-notes>
+
+  <!-- Publisher information (optional) -->
+  <publisher>
+    <name xlink:href="https://example.com" lang="en">Calc-DNA Project</name>
+  </publisher>
+
+  <!-- Dependencies (optional) -->
+  <dependencies>
+    <d:LibreOffice-minimal-version xmlns:d="http://openoffice.org/extensions/description/2006"
+                                    value="7.0"
+                                    d:name="LibreOffice 7.0" />
+  </dependencies>
+
+</description>

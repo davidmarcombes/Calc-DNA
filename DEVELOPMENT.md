@@ -181,171 +181,83 @@ dir "$env:LO_HOME\program\cli_*.dll"
 
 ## Project Structure
 
-The recommended project structure:
+The project follows a modular architecture:
 
 ```
-calc-dna/
+Calc-DNA/
 ├── src/
-│   ├── CalcDna.Core/              # Core framework (attributes, types)
-│   │   ├── CalcDna.Core.csproj
-│   │   └── ...
-│   ├── CalcDna.Host/              # UNO component implementation
-│   │   ├── CalcDna.Host.csproj
-│   │   └── ...
-│   └── CalcDna.Build/             # Build and packaging tools
-│       ├── CalcDna.Build.csproj
-│       └── ...
-├── samples/
-│   └── SimpleFunctions/           # Example add-in
-│       ├── SimpleFunctions.csproj
-│       └── Functions.cs
+│   ├── CalcDNA.Attributes/      # Attribute definitions (target for UDFs)
+│   ├── CalcDNA.CLI/             # Command-line tool for IDL/XCU generation
+│   ├── CalcDNA.Generator/       # Logic for generating IDL and service code
+│   ├── CalcDNA.Runtime/         # Runtime support and UNO type marshalling
+│   └── Demo.App/                # Sample Calc add-in
 ├── tests/
-│   └── CalcDna.Tests/
-│       └── CalcDna.Tests.csproj
-├── docs/
-├── .editorconfig
-├── .gitignore
-├── Directory.Build.props           # Shared MSBuild properties
+│   ├── CalcDNA.Generator.Tests/
+│   └── CalcDNA.Runtime.Tests/
 ├── README.md
 ├── DEVELOPMENT.md
-└── AGENTS.md
+└── CalcDNA.slnx                 # Solution file (Visual Studio 2022+)
 ```
 
-## Creating Your First Project
+## Building the Project
+
+To build the entire solution:
 
 ```bash
-# Create solution
-dotnet new sln -n CalcDna
-
-# Create core library
-dotnet new classlib -n CalcDna.Core -o src/CalcDna.Core -f net8.0
-dotnet sln add src/CalcDna.Core/CalcDna.Core.csproj
-
-# Create host component
-dotnet new classlib -n CalcDna.Host -o src/CalcDna.Host -f net8.0
-dotnet sln add src/CalcDna.Host/CalcDna.Host.csproj
-
-# Create sample
-dotnet new classlib -n SimpleFunctions -o samples/SimpleFunctions -f net8.0
-dotnet sln add samples/SimpleFunctions/SimpleFunctions.csproj
-
-# Add reference from Host to Core
-dotnet add src/CalcDna.Host reference src/CalcDna.Core
-
-# Add reference from Sample to Core
-dotnet add samples/SimpleFunctions reference src/CalcDna.Core
+dotnet build
 ```
 
-## Adding UNO Assembly References
+## Using the CLI Tool
 
-Edit your `.csproj` files to reference the UNO CLI assemblies:
+The CLI tool is used to process your Add-In assembly and generate the necessary metadata for LibreOffice.
 
-```xml
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-  </PropertyGroup>
-
-  <ItemGroup>
-    <!-- Windows paths -->
-    <Reference Include="cli_basetypes" Condition="'$(OS)' == 'Windows_NT'">
-      <HintPath>C:\Program Files\LibreOffice\program\cli_basetypes.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="cli_cppuhelper" Condition="'$(OS)' == 'Windows_NT'">
-      <HintPath>C:\Program Files\LibreOffice\program\cli_cppuhelper.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="cli_ure" Condition="'$(OS)' == 'Windows_NT'">
-      <HintPath>C:\Program Files\LibreOffice\program\cli_ure.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="cli_uretypes" Condition="'$(OS)' == 'Windows_NT'">
-      <HintPath>C:\Program Files\LibreOffice\program\cli_uretypes.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-
-    <!-- Linux paths -->
-    <Reference Include="cli_basetypes" Condition="'$(OS)' != 'Windows_NT'">
-      <HintPath>/usr/lib/libreoffice/program/cli_basetypes.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="cli_cppuhelper" Condition="'$(OS)' != 'Windows_NT'">
-      <HintPath>/usr/lib/libreoffice/program/cli_cppuhelper.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="cli_ure" Condition="'$(OS)' != 'Windows_NT'">
-      <HintPath>/usr/lib/libreoffice/program/cli_ure.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="cli_uretypes" Condition="'$(OS)' != 'Windows_NT'">
-      <HintPath>/usr/lib/libreoffice/program/cli_uretypes.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-  </ItemGroup>
-</Project>
-```
-
-## Testing Your Setup
-
-Create a simple test file to verify UNO assemblies load:
-
-```csharp
-// File: test-uno.cs
-using System;
-using unoidl.com.sun.star.uno;
-
-class Program
-{
-    static void Main()
-    {
-        Console.WriteLine("UNO assemblies loaded successfully!");
-        Console.WriteLine($"XInterface type: {typeof(XInterface)}");
-    }
-}
-```
-
-Compile and run:
 ```bash
-dotnet run
+# Run the CLI tool
+dotnet run --project src/CalcDNA.CLI -- <PathToYourAssembly.dll> [OutputPath] [AddInName]
 ```
 
-If this succeeds, your development environment is ready!
+### Options:
+- `--verbose`: Enable detailed output.
+- `assembly`: (Required) Path to the assembly containing your `[CalcAddIn]` classes.
+- `output`: (Optional) Directory to save generated files.
+- `name`: (Optional) Name for the add-in.
+- `--sdk`: (Optional) Explicit path to LibreOffice SDK.
 
-## Common Issues
+## Creating a New Add-In
 
-### Issue: Cannot find UNO assemblies
+1. **Create a new Class Library**:
+   ```bash
+   dotnet new classlib -n MyCalcAddIn
+   ```
 
-**Solution**: Verify the paths in your `.csproj` match your LibreOffice installation. Use:
-- Windows: `where /R "C:\Program Files\LibreOffice" cli_ure.dll`
-- Linux: `find /usr/lib/libreoffice -name "cli_ure.dll"`
+2. **Add Reference to CalcDNA.Attributes**:
+   ```bash
+   dotnet add MyCalcAddIn reference path/to/CalcDNA.Attributes.csproj
+   ```
 
-### Issue: LibreOffice won't load the extension
+3. **Define your functions**:
+   ```csharp
+   using CalcDNA.Attributes;
 
-**Solution**: Check that:
-1. Extension is built for correct .NET version
-2. All dependencies are included in .oxt
-3. manifest.xml is correctly formatted
-4. Component registration is correct
+   [CalcAddIn(Name = "MyTools")]
+   public class MyFunctions {
+       [CalcFunction]
+       public double MySum(double a, double b) => a + b;
+   }
+   ```
 
-### Issue: Functions don't appear in Calc
+4. **Generate Metadata**:
+   Use the CLI tool as described above to generate the `.idl`, `.xcu`, and `.rdb` files.
 
-**Solution**: 
-1. Check LibreOffice extension manager (Tools → Extension Manager)
-2. Verify extension is enabled
-3. Restart LibreOffice completely
-4. Check for errors in: Help → About LibreOffice → Show log
+## Testing
 
-## Next Steps
-
-1. Read through the [AGENTS.md](AGENTS.md) file for coding guidelines
-2. Review the LibreOffice SDK documentation
-3. Start with the proof-of-concept (see README.md roadmap)
-4. Join the LibreOffice development community for support
+Run tests using:
+```bash
+dotnet test
+```
 
 ## Resources
 
 - [LibreOffice SDK Documentation](https://api.libreoffice.org/)
 - [UNO/CLI Language Binding](https://wiki.openoffice.org/wiki/Uno/Cli)
 - [.NET Documentation](https://docs.microsoft.com/en-us/dotnet/)
-- [VS Code C# Documentation](https://code.visualstudio.com/docs/languages/csharp)

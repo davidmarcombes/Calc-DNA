@@ -79,6 +79,9 @@ public class UnoServiceGenerator : IIncrementalGenerator
                 case "Description":
                     description = namedArg.Value.Value?.ToString() ?? "";
                     break;
+                case "Namespace":
+                    // We could use this to override something if needed
+                    break;
             }
         }
 
@@ -113,6 +116,9 @@ public class UnoServiceGenerator : IIncrementalGenerator
         string displayName = method.Name;
         string description = "";
         string category = "Add-In";
+        string helpUrl = "";
+        string compatibilityName = "";
+        bool isVolatile = false;
 
         if (funcAttr != null)
         {
@@ -129,6 +135,15 @@ public class UnoServiceGenerator : IIncrementalGenerator
                     case "Category":
                         category = namedArg.Value.Value?.ToString() ?? "Add-In";
                         break;
+                    case "HelpUrl":
+                        helpUrl = namedArg.Value.Value?.ToString() ?? "";
+                        break;
+                    case "CompatibilityName":
+                        compatibilityName = namedArg.Value.Value?.ToString() ?? "";
+                        break;
+                    case "IsVolatile":
+                        isVolatile = (bool)(namedArg.Value.Value ?? false);
+                        break;
                 }
             }
         }
@@ -141,7 +156,10 @@ public class UnoServiceGenerator : IIncrementalGenerator
             DisplayName = displayName,
             Description = description,
             Category = category,
-            ReturnType = WrapperTypeMapping.MapTypeToWrapper(method.ReturnType, false),
+            HelpUrl = helpUrl,
+            CompatibilityName = compatibilityName,
+            IsVolatile = isVolatile,
+            ReturnType = WrapperTypeMapping.MapReturnTypeToWrapper(method.ReturnType),
             Parameters = parameters
         };
     }
@@ -299,7 +317,10 @@ public class UnoServiceGenerator : IIncrementalGenerator
             sb.AppendLine($"                DisplayName = \"{EscapeString(method.DisplayName)}\",");
             sb.AppendLine($"                Description = \"{EscapeString(method.Description)}\",");
             sb.AppendLine($"                Category = \"{EscapeString(method.Category)}\",");
-            sb.AppendLine("                Parameters = new[]");
+            sb.AppendLine($"                HelpUrl = \"{EscapeString(method.HelpUrl)}\",");
+            sb.AppendLine($"                CompatibilityName = \"{EscapeString(method.CompatibilityName)}\",");
+            sb.AppendLine($"                IsVolatile = {method.IsVolatile.ToString().ToLower()},");
+            sb.AppendLine("                Parameters = new ParameterMetadata[]");
             sb.AppendLine("                {");
             foreach (var param in method.Parameters)
             {
@@ -318,6 +339,9 @@ public class UnoServiceGenerator : IIncrementalGenerator
         sb.AppendLine("            public string DisplayName { get; init; } = \"\";");
         sb.AppendLine("            public string Description { get; init; } = \"\";");
         sb.AppendLine("            public string Category { get; init; } = \"Add-In\";");
+        sb.AppendLine("            public string HelpUrl { get; init; } = \"\";");
+        sb.AppendLine("            public string CompatibilityName { get; init; } = \"\";");
+        sb.AppendLine("            public bool IsVolatile { get; init; }");
         sb.AppendLine("            public ParameterMetadata[] Parameters { get; init; } = Array.Empty<ParameterMetadata>();");
         sb.AppendLine("        }");
         sb.AppendLine();
@@ -466,6 +490,9 @@ public class UnoServiceGenerator : IIncrementalGenerator
         public string DisplayName;
         public string Description;
         public string Category;
+        public string HelpUrl;
+        public string CompatibilityName;
+        public bool IsVolatile;
         public string ReturnType;
         public List<ParameterInfo> Parameters;
     }

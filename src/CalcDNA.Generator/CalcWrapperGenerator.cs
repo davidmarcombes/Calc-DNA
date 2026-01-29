@@ -1,6 +1,7 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
@@ -9,103 +10,110 @@ namespace CalcDNA.Generator;
 [Generator]
 public class CalcWrapperGenerator : IIncrementalGenerator
 {
-    const string sStatic = "static";
-    const string sPublic = "public";
+    private const string AttrCalcAddIn = "CalcAddIn";
+    private const string AttrCalcAddInFull = "CalcAddInAttribute";
+    private const string AttrCalcFunction = "CalcFunction";
+    private const string AttrCalcFunctionFull = "CalcFunctionAttribute";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // STEP 1: Filter - Find methods with [CalcFunction] in classes with [CalcAddIn]
-        var methodDeclarations = context.SyntaxProvider
+        // STEP 1: Filter - Find [CalcAddIn] classes
+        var classDeclarations = context.SyntaxProvider
             .CreateSyntaxProvider(
-                predicate: (node, _) => IsTargetMethod(node),
-                transform: (ctx, _) => GetSemanticTarget(ctx))
-            .Where(m => m is not null);
+                predicate: (node, _) => IsTargetClass(node),
+                transform: (ctx, _) => GetClassWrapperInfo(ctx))
+            .Where(c => c is not null);
 
-        // STEP 2: Output - Generate the wrapper code
-        context.RegisterSourceOutput(methodDeclarations, (spc, method) => {
-            if (method is null)
+        // STEP 2: Output - Generate the wrapper code per class
+        context.RegisterSourceOutput(classDeclarations, (spc, classInfo) => {
+            if (classInfo is null)
                 return;
 
-            var source = GenerateWrapperSource(method);
-            spc.AddSource($"{method.ContainingType.Name}_{method.Name}_Wrapper.g.cs", SourceText.From(source, Encoding.UTF8));
+            var source = GenerateClassWrapperSource(classInfo);
+            spc.AddSource($"{classInfo.ClassName}_Wrappers.g.cs", SourceText.From(source, Encoding.UTF8));
         });
     }
 
-    private static bool IsTargetMethod(SyntaxNode node)
+    private static bool IsTargetClass(SyntaxNode node)
     {
-        // Method used for syntactic filter
-        // Fast, lightweight check on the syntax tree
-
-        // Check if node is a method with any attributes
-        if (node is not MethodDeclarationSyntax method || method.AttributeLists.Count == 0)
+        if (node is not ClassDeclarationSyntax classDecl || classDecl.AttributeLists.Count == 0)
             return false;
 
-        // Check if containing class exists and has any attributes
-        if (method.Parent is not ClassDeclarationSyntax classDeclaration || classDeclaration.AttributeLists.Count == 0)
-            return false;
-
-        // Check if method is public and static
-        var modifiers = method.Modifiers;
-        if (!modifiers.Any(m => m.ValueText == sPublic) || !modifiers.Any(m => m.ValueText == sStatic))
-            return false;
-
-        // Check if class is public and static
-        var classModifiers = classDeclaration.Modifiers;
-        if (!classModifiers.Any(m => m.ValueText == sPublic) || !classModifiers.Any(m => m.ValueText == sStatic))
-            return false;
-
-        return true;
+        var modifiers = classDecl.Modifiers;
+        return modifiers.Any(m => m.ValueText == "public") &&
+               modifiers.Any(m => m.ValueText == "static") &&
+               modifiers.Any(m => m.ValueText == "partial");
     }
 
-    private static IMethodSymbol? GetSemanticTarget(GeneratorSyntaxContext context)
+    private static ClassWrapperInfo? GetClassWrapperInfo(GeneratorSyntaxContext context)
     {
-        // Method used for semantic filter
-        // More expensive, but provides full semantic information
-
-        var method = (MethodDeclarationSyntax)context.Node;
-        if (context.SemanticModel.GetDeclaredSymbol(method) is not IMethodSymbol methodSymbol)
+        var classDecl = (ClassDeclarationSyntax)context.Node;
+        if (context.SemanticModel.GetDeclaredSymbol(classDecl) is not INamedTypeSymbol classSymbol)
             return null;
 
-        // Check if method has [CalcFunction] attribute
-        var hasCalcFunction = methodSymbol.GetAttributes()
-            .Any(attr => attr.AttributeClass?.Name == "CalcFunctionAttribute" ||
-                        attr.AttributeClass?.Name == "CalcFunction");
-
-        if (!hasCalcFunction)
+        if (!classSymbol.GetAttributes().Any(a => 
+            a.AttributeClass?.Name is AttrCalcAddIn or AttrCalcAddInFull))
             return null;
 
-        // Check if containing class has [CalcAddIn] attribute
-        var containingClass = methodSymbol.ContainingType;
-        var hasCalcAddIn = containingClass.GetAttributes()
-            .Any(attr => attr.AttributeClass?.Name == "CalcAddInAttribute" ||
-                        attr.AttributeClass?.Name == "CalcAddIn");
+        var methods = classSymbol.GetMembers()
+            .OfType<IMethodSymbol>()
+            .Where(m => m.IsStatic && m.DeclaredAccessibility == Accessibility.Public)
+            .Where(m => m.GetAttributes().Any(a => 
+                a.AttributeClass?.Name is AttrCalcFunction or AttrCalcFunctionFull))
+            .ToList();
 
-        if (!hasCalcAddIn)
+        if (methods.Count == 0)
             return null;
 
-        return methodSymbol;
+        return new ClassWrapperInfo(classSymbol, methods);
     }
 
-    private static string GenerateWrapperSource(IMethodSymbol method)
+    private static string GenerateClassWrapperSource(ClassWrapperInfo info)
     {
-        var className = method.ContainingType.Name;
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("#nullable enable");
+        sb.AppendLine("using System;");
+        sb.AppendLine("using System.Collections.Generic;");
+        sb.AppendLine("using CalcDNA.Runtime;");
+        sb.AppendLine();
+        sb.AppendLine($"namespace {info.Namespace}");
+        sb.AppendLine("{");
+        sb.AppendLine($"    public partial class {info.ClassName}");
+        sb.AppendLine("    {");
+
+        foreach (var method in info.Methods)
+        {
+            GenerateMethodWrapper(sb, method);
+        }
+
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+
+        return sb.ToString();
+    }
+
+    private static void GenerateMethodWrapper(StringBuilder sb, IMethodSymbol method)
+    {
         var methodName = method.Name;
-        var namespaceName = method.ContainingNamespace.ToDisplayString();
-        var returnType = WrapperTypeMapping.MapTypeToWrapper(method.ReturnType, false);
+        var returnType = WrapperTypeMapping.MapReturnTypeToWrapper(method.ReturnType);
 
-        var parameters = string.Join(", ", method.Parameters.Select(p =>
-            $"{WrapperTypeMapping.MapTypeToWrapper(p.Type, WrapperTypeMapping.IsOptionalParameter(p))} {p.Name}"));
+        var parametersList = method.Parameters.Select(p =>
+            $"{WrapperTypeMapping.MapTypeToWrapper(p.Type, WrapperTypeMapping.IsOptionalParameter(p))} {p.Name}");
+        var parameters = string.Join(", ", parametersList);
 
-        // Build marshaling code and parameter list
-        var marshalLines = new StringBuilder();
+        sb.AppendLine($"        public static {returnType} {methodName}_UNOWrapper({parameters})");
+        sb.AppendLine("        {");
+        sb.AppendLine("            try");
+        sb.AppendLine("            {");
+
         var callArgs = new List<string>();
-
         foreach (var parameter in method.Parameters)
         {
             if (WrapperTypeMapping.NeedsMarshaling(parameter))
             {
                 var marshaledName = $"marshaled_{parameter.Name}";
-                marshalLines.AppendLine($"                var {marshaledName} = {WrapperTypeMapping.GetMarshalingCode(parameter)};");
+                sb.AppendLine($"                var {marshaledName} = {WrapperTypeMapping.GetMarshalingCode(parameter)};");
                 callArgs.Add(marshaledName);
             }
             else
@@ -114,29 +122,29 @@ public class CalcWrapperGenerator : IIncrementalGenerator
             }
         }
 
-        var callArgsList = string.Join(", ", callArgs);
+        var callCode = $"{methodName}({string.Join(", ", callArgs)})";
+        var returnCode = WrapperTypeMapping.GetReturnMarshalingCode(method, callCode);
+        
+        sb.AppendLine($"                {returnCode}");
+        sb.AppendLine("            }");
+        sb.AppendLine("            catch (Exception ex)");
+        sb.AppendLine("            {");
+        sb.AppendLine($"                throw new Exception($\"Error calling {methodName}: {{ex.Message}}\", ex);");
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
+    }
 
-        return $@"// <auto-generated/>
-#nullable enable
-using System;
-using CalcDNA.Runtime;
+    public class ClassWrapperInfo
+    {
+        public INamedTypeSymbol ClassSymbol { get; }
+        public List<IMethodSymbol> Methods { get; }
+        public string ClassName => ClassSymbol.Name;
+        public string Namespace => ClassSymbol.ContainingNamespace.ToDisplayString();
 
-namespace {namespaceName}
-{{
-    public partial class {className}
-    {{
-        public static {returnType} {methodName}_UNOWrapper({parameters})
-        {{
-            try
-            {{
-{marshalLines}                return {methodName}({callArgsList});
-            }}
-            catch (Exception ex)
-            {{
-                throw new Exception($""Error calling {methodName}: "" + ex.Message);
-            }}
-        }}
-    }}
-}}";
+        public ClassWrapperInfo(INamedTypeSymbol classSymbol, List<IMethodSymbol> methods)
+        {
+            ClassSymbol = classSymbol;
+            Methods = methods;
+        }
     }
 }

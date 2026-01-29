@@ -1,11 +1,19 @@
 using System.Reflection;
 using System.Xml.Linq;
 using CalcDNA.CLI;
+using System.Collections.Generic;
+using System.Linq;
 
-public static class XcuGenerator
+/// <summary>
+/// XCU (XML Configuration) generator for LibreOffice Calc add-ins.
+/// </summary>
+internal static class XcuGenerator
 {
     private static readonly XNamespace Oor = "http://openoffice.org/2001/registry";
 
+    /// <summary>
+    /// Build the XCU file content.
+    /// </summary>
     public static string BuildXcu(IEnumerable<AddInClass> addInClasses, Logger logger)
     {
         var addInNodes = new List<XElement>();
@@ -14,7 +22,11 @@ public static class XcuGenerator
         {
             try
             {
-                addInNodes.Add(CreateAddInNode(addIn, logger));
+                var node = CreateAddInNode(addIn, logger);
+                if (node != null)
+                {
+                    addInNodes.Add(node);
+                }
             }
             catch (Exception ex)
             {
@@ -36,7 +48,7 @@ public static class XcuGenerator
         return doc.ToString();
     }
 
-    private static XElement CreateAddInNode(AddInClass addIn, Logger logger)
+    private static XElement? CreateAddInNode(AddInClass addIn, Logger logger)
     {
         string implementationName = addIn.Type.FullName ?? addIn.Type.Name;
 
@@ -49,9 +61,11 @@ public static class XcuGenerator
             }
             catch (Exception ex)
             {
-                logger.Warning($"Skipping method '{method.Name}': {ex.Message}");
+                logger.Warning($"Skipping method '{method.Name}' in {addIn.Type.Name}: {ex.Message}");
             }
         }
+
+        if (!functionNodes.Any()) return null;
 
         return new XElement("node",
             new XAttribute(Oor + "name", implementationName),
@@ -71,16 +85,23 @@ public static class XcuGenerator
         string displayName = method.Name;
         string desc = "";
         string category = "Add-In";
+        string compatName = "";
 
         if (funcAttr != null)
         {
+            // Check constructor arguments (if name was passed via constructor)
+            if (funcAttr.ConstructorArguments.Count > 0)
+            {
+                displayName = funcAttr.ConstructorArguments[0].Value?.ToString() ?? displayName;
+            }
+
             // Check named arguments for all properties
             foreach (var namedArg in funcAttr.NamedArguments)
             {
                 switch (namedArg.MemberName)
                 {
                     case "Name":
-                        displayName = namedArg.TypedValue.Value?.ToString() ?? method.Name;
+                        displayName = namedArg.TypedValue.Value?.ToString() ?? displayName;
                         break;
                     case "Description":
                         desc = namedArg.TypedValue.Value?.ToString() ?? "";
@@ -88,17 +109,14 @@ public static class XcuGenerator
                     case "Category":
                         category = namedArg.TypedValue.Value?.ToString() ?? "Add-In";
                         break;
+                    case "CompatibilityName":
+                        compatName = namedArg.TypedValue.Value?.ToString() ?? "";
+                        break;
                 }
-            }
-
-            // Also check constructor arguments (if name was passed via constructor)
-            if (funcAttr.ConstructorArguments.Count > 0)
-            {
-                displayName = funcAttr.ConstructorArguments[0].Value?.ToString() ?? displayName;
             }
         }
 
-        return new XElement("node",
+        var node = new XElement("node",
             new XAttribute(Oor + "name", method.Name),
             new XAttribute(Oor + "op", "replace"),
             new XElement("prop", new XAttribute(Oor + "name", "DisplayName"),
@@ -106,10 +124,19 @@ public static class XcuGenerator
             new XElement("prop", new XAttribute(Oor + "name", "Description"),
                 new XElement("value", desc)),
             new XElement("prop", new XAttribute(Oor + "name", "Category"),
-                new XElement("value", category)),
-            new XElement("node", new XAttribute(Oor + "name", "Parameters"),
-                method.GetParameters().Select(p => CreateParameterNode(p, logger)))
+                new XElement("value", category))
         );
+
+        if (!string.IsNullOrEmpty(compatName))
+        {
+            node.Add(new XElement("prop", new XAttribute(Oor + "name", "CompatibilityName"),
+                new XElement("value", compatName)));
+        }
+
+        node.Add(new XElement("node", new XAttribute(Oor + "name", "Parameters"),
+                method.GetParameters().Select(p => CreateParameterNode(p, logger))));
+
+        return node;
     }
 
     private static XElement CreateParameterNode(ParameterInfo param, Logger logger)
@@ -117,19 +144,39 @@ public static class XcuGenerator
         var paramAttr = param.GetCustomAttributesData()
             .FirstOrDefault(a => a.AttributeType.Name == "CalcParameterAttribute");
 
+        string displayName = param.Name ?? $"arg{param.Position}";
         string desc = "";
-        if (paramAttr != null && paramAttr.ConstructorArguments.Count > 0)
+
+        if (paramAttr != null)
         {
-            desc = paramAttr.ConstructorArguments[0].Value?.ToString() ?? "";
+             // Check constructor arguments
+            if (paramAttr.ConstructorArguments.Count > 0)
+            {
+                displayName = paramAttr.ConstructorArguments[0].Value?.ToString() ?? displayName;
+            }
+
+            // Check named arguments
+            foreach (var namedArg in paramAttr.NamedArguments)
+            {
+                switch (namedArg.MemberName)
+                {
+                    case "Name":
+                        displayName = namedArg.TypedValue.Value?.ToString() ?? displayName;
+                        break;
+                    case "Description":
+                        desc = namedArg.TypedValue.Value?.ToString() ?? "";
+                        break;
+                }
+            }
         }
 
-        string paramName = param.Name ?? $"arg{param.Position}";
+        string paramInternalName = param.Name ?? $"arg{param.Position}";
 
         return new XElement("node",
-            new XAttribute(Oor + "name", paramName),
+            new XAttribute(Oor + "name", paramInternalName),
             new XAttribute(Oor + "op", "replace"),
             new XElement("prop", new XAttribute(Oor + "name", "DisplayName"),
-                new XElement("value", paramName)),
+                new XElement("value", displayName)),
             new XElement("prop", new XAttribute(Oor + "name", "Description"),
                 new XElement("value", desc))
         );

@@ -116,7 +116,63 @@ public class UnoMarshalTests
         Assert.Empty(result);
     }
 
+    [Fact]
+    public void ToList_WithMixedNumericTypes_ConvertsCorrectly()
+    {
+        object[] source = [1.0, 2.0];
+        var result = UnoMarshal.ToList<int>(source);
+        Assert.Equal([1, 2], result);
+    }
+
     #endregion
+
+    #region ToUnoArray Tests
+
+    [Fact]
+    public void ToUno1DArray_WithValidData_ReturnsObjectArray()
+    {
+        int[] source = [1, 2, 3];
+        var result = UnoMarshal.ToUno1DArray(source);
+        Assert.Equal(3, result.Length);
+        Assert.Equal(1, result[0]);
+    }
+
+    [Fact]
+    public void ToUno1DArray_WithNull_ReturnsEmptyArray()
+    {
+        var result = UnoMarshal.ToUno1DArray<int>(null);
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void ToUno2DArray_WithValidData_ReturnsJaggedArray()
+    {
+        int[,] source = { { 1, 2 }, { 3, 4 } };
+        var result = UnoMarshal.ToUno2DArray(source);
+        Assert.Equal(2, result.Length);
+        Assert.Equal(2, result[0].Length);
+        Assert.Equal(1, result[0][0]);
+        Assert.Equal(4, result[1][1]);
+    }
+
+    [Fact]
+    public void ToUno2DArray_WithNull_ReturnsEmptyJaggedArray()
+    {
+        var result = UnoMarshal.ToUno2DArray<int>(null);
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void ToUno2DArray_WithCalcRange_ReturnsJaggedArray()
+    {
+        var range = new CalcRange(new object[,] { { 1, 2 } });
+        var result = UnoMarshal.ToUno2DArray(range);
+        Assert.Single(result);
+        Assert.Equal(2, result[0].Length);
+    }
+
+    #endregion
+
 
     #region ToDateTime Tests
 
@@ -202,7 +258,57 @@ public class UnoMarshalTests
         Assert.Equal(defaultDate, result);
     }
 
+    [Theory]
+    [InlineData(10, 0, 10)]
+    [InlineData(null, 5, 5)]
+    public void UnwrapOptionalByte_WithVariousInputs_ReturnsExpected(object? value, byte defaultValue, byte expected)
+    {
+        var result = UnoMarshal.UnwrapOptionalByte(value, defaultValue);
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void UnwrapOptional1DArray_WithValidData_ReturnsArray()
+    {
+        object[] source = [1.0, 2.0];
+        var result = UnoMarshal.UnwrapOptional1DArray(source, [0.0]);
+        Assert.Equal([1.0, 2.0], result);
+    }
+
+    [Fact]
+    public void UnwrapOptional1DArray_WithNull_ReturnsDefault()
+    {
+        var defaultValue = new double[] { 99.0 };
+        var result = UnoMarshal.UnwrapOptional1DArray(null, defaultValue);
+        Assert.Same(defaultValue, result);
+    }
+
+    [Fact]
+    public void UnwrapOptional2DArray_WithValidData_ReturnsArray()
+    {
+        object[][] source = [[1.0]];
+        var result = UnoMarshal.UnwrapOptional2DArray(source, new double[0, 0]);
+        Assert.Equal(1.0, result[0, 0]);
+    }
+
+    [Fact]
+    public void UnwrapOptionalCalcRange_WithValidData_ReturnsRange()
+    {
+        object[][] source = [[1, 2]];
+        var result = UnoMarshal.UnwrapOptionalCalcRange(source, new CalcRange(new object[0, 0]));
+        Assert.Equal(1, result[0, 0]);
+    }
+
+    [Fact]
+    public void UnwrapOptionalList_WithValidData_ReturnsList()
+    {
+        object[] source = [1.0];
+        var result = UnoMarshal.UnwrapOptionalList(source, new List<double>());
+        Assert.Single(result);
+    }
+
     #endregion
+
 
     #region UnwrapNullable Tests
 
@@ -241,7 +347,46 @@ public class UnoMarshalTests
         Assert.Equal(new DateTime(2021, 1, 1), result);
     }
 
+    [Fact]
+    public void UnwrapNullableBool_WithBoolValue_ReturnsValue()
+    {
+        var result = UnoMarshal.UnwrapNullableBool(true);
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void UnwrapNullable1DArray_WithValidData_ReturnsArray()
+    {
+        object[] source = [1.0];
+        var result = UnoMarshal.UnwrapNullable1DArray<double>(source);
+        Assert.Single(result!);
+    }
+
+    [Fact]
+    public void UnwrapNullable2DArray_WithNull_ReturnsNull()
+    {
+        var result = UnoMarshal.UnwrapNullable2DArray<double>(null);
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void UnwrapNullableCalcRange_WithValidData_ReturnsRange()
+    {
+        object[][] source = [[1, 2]];
+        var result = UnoMarshal.UnwrapNullableCalcRange(source);
+        Assert.Equal(1, result![0, 0]);
+    }
+
+    [Fact]
+    public void UnwrapNullableList_WithValidData_ReturnsList()
+    {
+        object[] source = [1.0];
+        var result = UnoMarshal.UnwrapNullableList<double>(source);
+        Assert.Single(result!);
+    }
+
     #endregion
+
 
     #region Edge Cases
 
@@ -253,13 +398,71 @@ public class UnoMarshalTests
     }
 
     [Fact]
-    public void UnwrapOptional_WithSingleElementEmptyArray_TreatsAsEmpty()
+    public void UnwrapOptional_WithNestedEmptyArray_TreatsAsEmpty()
     {
-        // Single cell range with empty cell
-        object[] emptyArray = [null];
-        var result = UnoMarshal.UnwrapOptionalInt(emptyArray, 99);
-        Assert.Equal(99, result);
+        // 2D range with a single empty cell
+        object[][] emptyJagged = [[null]];
+        var result = UnoMarshal.UnwrapOptionalInt(emptyJagged, 123);
+        Assert.Equal(123, result);
     }
 
+    [Fact]
+    public void ConvertValue_CharFromString_ReturnsFirstChar()
+    {
+        var result = UnoMarshal.ConvertValue<char>("ABC");
+        Assert.Equal('A', result);
+    }
+
+    [Fact]
+    public void ConvertValue_StringFromInt_ReturnsStringRep()
+    {
+        var result = UnoMarshal.ConvertValue<string>(123);
+        Assert.Equal("123", result);
+    }
+
+    [Fact]
+    public void UnwrapNullable_WithValidValue_ReturnsValue()
+    {
+        var result = UnoMarshal.UnwrapNullable<double>(1.23);
+        Assert.Equal(1.23, result);
+    }
+    [Fact]
+    public void IsEmpty_WithMissing_ReturnsTrue()
+    {
+        // System.Reflection.Missing is used in some COM/UNO scenarios
+        var result = UnoMarshal.UnwrapOptionalInt(System.Reflection.Missing.Value, 42);
+        Assert.Equal(42, result);
+    }
+
+    [Fact]
+    public void IsEmpty_WithNestedEmptyJaggedArray_ReturnsTrue()
+    {
+        object[][] source = [[null]];
+        var result = UnoMarshal.UnwrapOptionalInt(source, 100);
+        Assert.Equal(100, result);
+    }
+
+    [Fact]
+    public void ConvertValue_DateTimeFromDouble_ConvertsCorrectly()
+    {
+        // 44197.0 is 2021-01-01
+        var result = UnoMarshal.ConvertValue<DateTime>(44197.0);
+        Assert.Equal(new DateTime(2021, 1, 1), result);
+    }
+
+    [Fact]
+    public void ConvertValue_NullableInt_ConvertsCorrectly()
+    {
+        var result = UnoMarshal.ConvertValue<int?>(42.0);
+        Assert.Equal(42, result);
+    }
+
+    [Fact]
+    public void ConvertValue_NullToNullable_ReturnsNull()
+    {
+        var result = UnoMarshal.ConvertValue<int?>(null);
+        Assert.Null(result);
+    }
     #endregion
+
 }

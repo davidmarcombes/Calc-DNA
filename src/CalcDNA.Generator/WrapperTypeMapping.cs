@@ -14,7 +14,22 @@ public static class WrapperTypeMapping
         if (typeSymbol.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
             return "object?";
 
-        // 3. POD Mapping with UNO-Specific adjustments
+        // 3. Handle Arrays
+        if (typeSymbol is IArrayTypeSymbol arrayType)
+        {
+            if (arrayType.Rank > 1 || arrayType.ElementType is IArrayTypeSymbol)
+                return "object[][]";
+            return "object[]";
+        }
+
+        // 4. Handle CalcRange
+        if (typeSymbol.Name == "CalcRange" &&
+            typeSymbol.ContainingNamespace?.ToDisplayString() == "CalcDNA.Runtime")
+        {
+            return "object[][]";
+        }
+
+        // 5. POD Mapping with UNO-Specific adjustments
         return typeSymbol.SpecialType switch
         {
             SpecialType.System_Boolean => "bool",
@@ -28,6 +43,39 @@ public static class WrapperTypeMapping
             SpecialType.System_String => "string",
             _ => "object?"  // Default safety net
         };
+    }
+
+    public static string MapReturnTypeToWrapper(ITypeSymbol typeSymbol)
+    {
+        if (typeSymbol.SpecialType == SpecialType.System_Void)
+            return "void";
+
+        if (typeSymbol.SpecialType == SpecialType.System_DateTime)
+            return "double";
+
+        if (typeSymbol is IArrayTypeSymbol arrayType)
+        {
+            if (arrayType.Rank > 1 || arrayType.ElementType is IArrayTypeSymbol)
+                return "object[][]";
+            return "object[]";
+        }
+
+        if (typeSymbol.Name == "CalcRange" &&
+            typeSymbol.ContainingNamespace?.ToDisplayString() == "CalcDNA.Runtime")
+        {
+            return "object[][]";
+        }
+
+        // Generic collections
+        if (typeSymbol is INamedTypeSymbol { IsGenericType: true } namedType)
+        {
+            var name = namedType.Name;
+            var ns = namedType.ContainingNamespace?.ToDisplayString();
+            if (ns == "System.Collections.Generic" && (name is "List" or "IEnumerable" or "ICollection" or "IList"))
+                return "object[]";
+        }
+
+        return MapTypeToWrapper(typeSymbol, false);
     }
 
     public static bool IsTypeMappedToObject(ITypeSymbol typeSymbol, bool optional)
@@ -88,6 +136,41 @@ public static class WrapperTypeMapping
         // Complex data structure
         return GetComplexTypeMarshalingCode(parameter);
 
+    }
+
+    public static string GetReturnMarshalingCode(IMethodSymbol method, string callCode)
+    {
+        var type = method.ReturnType;
+
+        if (type.SpecialType == SpecialType.System_Void)
+            return $"{callCode};";
+
+        if (type.SpecialType == SpecialType.System_DateTime)
+            return $"return {callCode}.ToOADate();";
+
+        if (type is IArrayTypeSymbol arrayType)
+        {
+            if (arrayType.Rank == 1)
+                return $"return UnoMarshal.ToUno1DArray({callCode});";
+            else
+                return $"return UnoMarshal.ToUno2DArray({callCode});";
+        }
+
+        if (type.Name == "CalcRange" &&
+            type.ContainingNamespace?.ToDisplayString() == "CalcDNA.Runtime")
+        {
+            return $"return UnoMarshal.ToUno2DArray({callCode});";
+        }
+
+        if (type is INamedTypeSymbol { IsGenericType: true } namedType)
+        {
+            var name = namedType.Name;
+            var ns = namedType.ContainingNamespace?.ToDisplayString();
+            if (ns == "System.Collections.Generic" && (name is "List" or "IEnumerable" or "ICollection" or "IList"))
+                return $"return UnoMarshal.ToUno1DArray({callCode});";
+        }
+
+        return $"return {callCode};";
     }
 
     private static string GetOptionalMarshalingCode(IParameterSymbol parameter)

@@ -25,6 +25,10 @@ public class WrapperTypeMappingTests
             "char" => compilation.GetSpecialType(SpecialType.System_Char),
             "string" => compilation.GetSpecialType(SpecialType.System_String),
             "object" => compilation.GetSpecialType(SpecialType.System_Object),
+            "void" => compilation.GetSpecialType(SpecialType.System_Void),
+            "datetime" => compilation.GetSpecialType(SpecialType.System_DateTime),
+            "double[]" => compilation.CreateArrayTypeSymbol(compilation.GetSpecialType(SpecialType.System_Double)),
+            "double[][]" => compilation.CreateArrayTypeSymbol(compilation.CreateArrayTypeSymbol(compilation.GetSpecialType(SpecialType.System_Double))),
             _ => throw new ArgumentException($"Unknown type: {typeName}")
         };
     }
@@ -70,6 +74,22 @@ public class WrapperTypeMappingTests
         Assert.Equal("short", result);
     }
 
+    [Fact]
+    public void MapTypeToWrapper_WithArray_MapsToObjectArray()
+    {
+        var typeSymbol = GetTypeSymbol("double[]");
+        var result = WrapperTypeMapping.MapTypeToWrapper(typeSymbol, optional: false);
+        Assert.Equal("object[]", result);
+    }
+
+    [Fact]
+    public void MapTypeToWrapper_WithJaggedArray_MapsToNestedObjectArray()
+    {
+        var typeSymbol = GetTypeSymbol("double[][]");
+        var result = WrapperTypeMapping.MapTypeToWrapper(typeSymbol, optional: false);
+        Assert.Equal("object[][]", result);
+    }
+
     #endregion
 
     #region IsTypeMappedToObject Tests
@@ -95,6 +115,24 @@ public class WrapperTypeMappingTests
         var typeSymbol = GetTypeSymbol(inputType);
         var result = WrapperTypeMapping.IsTypeMappedToObject(typeSymbol, optional);
         Assert.Equal(expected, result);
+    }
+
+    #endregion
+
+    #region MapReturnTypeToWrapper Tests
+
+    [Theory]
+    [InlineData("void", "void")]
+    [InlineData("double", "double")]
+    [InlineData("datetime", "double")]
+    [InlineData("double[]", "object[]")]
+    [InlineData("double[][]", "object[][]")]
+    [InlineData("string", "string")]
+    public void MapReturnTypeToWrapper_WithVariousTypes_ReturnsExpected(string inputType, string expectedOutput)
+    {
+        var typeSymbol = GetTypeSymbol(inputType);
+        var result = WrapperTypeMapping.MapReturnTypeToWrapper(typeSymbol);
+        Assert.Equal(expectedOutput, result);
     }
 
     #endregion
