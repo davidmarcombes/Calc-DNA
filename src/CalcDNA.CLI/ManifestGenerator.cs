@@ -1,4 +1,4 @@
-using System.Xml.Linq;
+using System.Text;
 
 namespace CalcDNA.CLI;
 
@@ -8,8 +8,6 @@ namespace CalcDNA.CLI;
 /// </summary>
 internal static class ManifestGenerator
 {
-    private static readonly XNamespace ManifestNs = "http://openoffice.org/2001/manifest";
-
     /// <summary>
     /// Generates the manifest.xml content for an OXT package.
     /// </summary>
@@ -21,56 +19,39 @@ internal static class ManifestGenerator
     {
         logger.Debug("Building manifest.xml...", true);
 
-        var fileEntries = new List<XElement>();
+        var sb = new StringBuilder();
+        sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+        sb.AppendLine("<manifest:manifest xmlns:manifest=\"http://openoffice.org/2001/manifest\">");
 
         // Add the XCU configuration file
-        fileEntries.Add(CreateFileEntry(
-            $"{addInName}.xcu",
-            "application/vnd.sun.star.configuration-data"
-        ));
+        sb.AppendLine($"  <manifest:file-entry manifest:full-path=\"{addInName}.xcu\" manifest:media-type=\"application/vnd.sun.star.configuration-data\"/>");
 
         // Add the RDB type library
-        fileEntries.Add(CreateFileEntry(
-            $"{addInName}.rdb",
-            "application/vnd.sun.star.uno-typelibrary;type=RDB"
-        ));
+        sb.AppendLine($"  <manifest:file-entry manifest:full-path=\"{addInName}.rdb\" manifest:media-type=\"application/vnd.sun.star.uno-typelibrary;type=RDB\"/>");
 
         // Add all assembly files
         foreach (var assemblyFile in assemblyFiles)
         {
             string fileName = Path.GetFileName(assemblyFile);
 
-            // Determine media type based on file extension
+            // Only the main add-in DLL is a UNO component; dependency DLLs
+            // (CalcDNA.Runtime, CalcDNA.Attributes) are plain assemblies.
             string mediaType = Path.GetExtension(fileName).ToLowerInvariant() switch
             {
+                ".dll" when fileName.StartsWith("CalcDNA.", StringComparison.OrdinalIgnoreCase)
+                    => "application/octet-stream",
                 ".dll" => "application/vnd.sun.star.uno-component;type=.NET",
                 ".json" => "application/json",
                 _ => "application/octet-stream"
             };
 
-            fileEntries.Add(CreateFileEntry(fileName, mediaType));
+            sb.AppendLine($"  <manifest:file-entry manifest:full-path=\"{fileName}\" manifest:media-type=\"{mediaType}\"/>");
             logger.Debug($"  Added: {fileName} ({mediaType})", true);
         }
 
-        var doc = new XDocument(
-            new XDeclaration("1.0", "UTF-8", null),
-            new XElement(ManifestNs + "manifest",
-                fileEntries
-            )
-        );
+        sb.AppendLine("</manifest:manifest>");
 
         logger.Debug("Manifest.xml generated successfully", true);
-        return doc.ToString();
-    }
-
-    /// <summary>
-    /// Creates a file-entry element for the manifest.
-    /// </summary>
-    private static XElement CreateFileEntry(string path, string mediaType)
-    {
-        return new XElement(ManifestNs + "file-entry",
-            new XAttribute(ManifestNs + "full-path", path),
-            new XAttribute(ManifestNs + "media-type", mediaType)
-        );
+        return sb.ToString();
     }
 }

@@ -101,6 +101,7 @@ public class UnoServiceGenerator : IIncrementalGenerator
         {
             ClassName = classSymbol.Name,
             Namespace = classSymbol.ContainingNamespace.ToDisplayString(),
+            AssemblyName = context.SemanticModel.Compilation.AssemblyName ?? "AddIn",
             AddInName = addInName,
             Description = description,
             Methods = methods
@@ -209,7 +210,12 @@ public class UnoServiceGenerator : IIncrementalGenerator
         sb.AppendLine("using CalcDNA.Runtime;");
         sb.AppendLine("using CalcDNA.Runtime.Uno;");
         sb.AppendLine();
-        sb.AppendLine($"namespace {classInfo.Namespace}");
+
+        // Namespace must match the UNO module name so the .NET bridge can
+        // find the service class by its fully-qualified type name.
+        // E.g. service "Demo_App.Functions" → type "Demo_App.Functions".
+        string moduleName = SanitizeModuleName(classInfo.AssemblyName);
+        sb.AppendLine($"namespace {moduleName}");
         sb.AppendLine("{");
 
         // Generate interface for the functions
@@ -244,13 +250,16 @@ public class UnoServiceGenerator : IIncrementalGenerator
     private static void GenerateServiceClass(StringBuilder sb, AddInClassInfo classInfo)
     {
         string interfaceName = $"IX{classInfo.ClassName}";
-        string serviceName = $"{classInfo.Namespace}.{classInfo.ClassName}";
+        // Must match the module name used by the CLI's IDL/XCU generators —
+        // those sanitize the assembly name (dots → underscores) to form the UNO module.
+        string moduleName = SanitizeModuleName(classInfo.AssemblyName);
+        string serviceName = $"{moduleName}.{classInfo.ClassName}";
 
         sb.AppendLine($"    /// <summary>");
         sb.AppendLine($"    /// UNO Service implementation for {classInfo.ClassName}.");
         sb.AppendLine($"    /// Implements the required UNO interfaces for LibreOffice integration.");
         sb.AppendLine($"    /// </summary>");
-        sb.AppendLine($"    public sealed class {classInfo.ClassName}_UnoService : {interfaceName}, IXServiceInfo, IXLocalizable, IXAddIn");
+        sb.AppendLine($"    public sealed class {classInfo.ClassName} : {interfaceName}, IXServiceInfo, IXLocalizable, IXAddIn");
         sb.AppendLine("    {");
 
         // Constants
@@ -267,6 +276,13 @@ public class UnoServiceGenerator : IIncrementalGenerator
         sb.AppendLine("        private Locale _locale = Locale.Default;");
         sb.AppendLine();
 
+        // Constructor with diagnostic logging
+        sb.AppendLine($"        public {classInfo.ClassName}()");
+        sb.AppendLine("        {");
+        sb.AppendLine($"            try {{ System.IO.File.AppendAllText(\"/tmp/calcdna_debug.log\", \"{classInfo.ClassName} instantiated\\n\"); }} catch {{ }}");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+
         // Function metadata dictionary
         GenerateFunctionMetadata(sb, classInfo);
 
@@ -281,7 +297,8 @@ public class UnoServiceGenerator : IIncrementalGenerator
 
             sb.AppendLine($"        public {method.ReturnType} {method.Name}({paramList})");
             sb.AppendLine("        {");
-            sb.AppendLine($"            return {classInfo.ClassName}.{method.Name}_UNOWrapper({argList});");
+            sb.AppendLine($"            try {{ System.IO.File.AppendAllText(\"/tmp/calcdna_debug.log\", \"{method.Name} called\\n\"); }} catch {{ }}");
+            sb.AppendLine($"            return {classInfo.Namespace}.{classInfo.ClassName}.{method.Name}_UNOWrapper({argList});");
             sb.AppendLine("        }");
             sb.AppendLine();
         }
@@ -459,9 +476,35 @@ public class UnoServiceGenerator : IIncrementalGenerator
         sb.AppendLine($"        /// <summary>");
         sb.AppendLine($"        /// Creates a new instance of the {classInfo.ClassName} UNO service.");
         sb.AppendLine($"        /// </summary>");
-        sb.AppendLine($"        public static {classInfo.ClassName}_UnoService Create() => new();");
+        sb.AppendLine($"        public static {classInfo.ClassName} Create() => new();");
         sb.AppendLine();
         sb.AppendLine("        #endregion");
+    }
+
+    /// <summary>
+    /// Sanitizes an assembly name into a valid UNO module name.
+    /// Must produce the same result as Program.cs SanitizeName so that the
+    /// ImplementationName here matches the oor:name in the XCU and the
+    /// module name in the IDL.
+    /// </summary>
+    private static string SanitizeModuleName(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return "AddIn";
+
+        var sb = new StringBuilder();
+        foreach (char c in name)
+        {
+            if (char.IsLetterOrDigit(c) || c == '_')
+                sb.Append(c);
+            else
+                sb.Append('_');
+        }
+
+        string result = sb.ToString().Trim('_');
+        if (result.Length > 0 && char.IsDigit(result[0]))
+            result = "_" + result;
+
+        return string.IsNullOrEmpty(result) ? "AddIn" : result;
     }
 
     private static string EscapeString(string value)
@@ -479,6 +522,7 @@ public class UnoServiceGenerator : IIncrementalGenerator
     {
         public string ClassName;
         public string Namespace;
+        public string AssemblyName;
         public string AddInName;
         public string Description;
         public List<MethodInfo> Methods;

@@ -29,7 +29,22 @@ public static class WrapperTypeMapping
             return "object[][]";
         }
 
-        // 5. POD Mapping with UNO-Specific adjustments
+        // 5. Handle List<T> / IEnumerable<T> -> object[]
+        if (typeSymbol is INamedTypeSymbol { IsGenericType: true } listType &&
+            listType.ContainingNamespace?.ToDisplayString() == "System.Collections.Generic" &&
+            (listType.Name is "List" or "IEnumerable" or "ICollection" or "IList"))
+        {
+            return "object[]";
+        }
+
+        // 6. Handle DateTime -> double (OLE Automation date)
+        if (typeSymbol.Name == "DateTime" &&
+            typeSymbol.ContainingNamespace?.ToDisplayString() == "System")
+        {
+            return "double";
+        }
+
+        // 7. POD Mapping with UNO-Specific adjustments
         return typeSymbol.SpecialType switch
         {
             SpecialType.System_Boolean => "bool",

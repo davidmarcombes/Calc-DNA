@@ -73,6 +73,12 @@ internal static class IdlGenerator
 
     private static string MapParameterType(ParameterInfo param, Logger logger)
     {
+        // Optional parameters must be 'any' in IDL — Calc passes an empty variant
+        // when the user omits an optional argument, and only 'any' can accept that.
+        // The C# wrapper side already uses object? for these.
+        if (param.IsOptional)
+            return "any";
+
         try
         {
             return UnoTypeMapping.MapTypeToUno(param.ParameterType);

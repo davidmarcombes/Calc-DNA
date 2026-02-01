@@ -45,10 +45,10 @@
       <OutputDirNoSlash>$(TargetDir.TrimEnd('\'))</OutputDirNoSlash>
     </PropertyGroup>
     <Message Importance="high" Text="Generating CalcDNA metadata for $(TargetFileName)..." />
-    <Exec Command="dotnet &quot;$(CalcDNACLIPath)&quot; &quot;$(TargetAssemblyPath)&quot; &quot;$(OutputDirNoSlash)&quot;"
+    <Exec Command="dotnet &quot;$(CalcDNACLIPath)&quot; &quot;$(TargetAssemblyPath)&quot; &quot;$(OutputDirNoSlash)&quot; -p"
           ConsoleToMSBuild="true"
           StandardOutputImportance="normal" />
-    <Message Importance="high" Text="Generated IDL, RDB and XCU files in $(TargetDir)" />
+    <Message Importance="high" Text="Generated CalcDNA extension package in $(TargetDir)" />
   </Target>
 
 </Project>
