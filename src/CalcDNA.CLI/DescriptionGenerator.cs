@@ -21,7 +21,7 @@ internal static class DescriptionGenerator
         public string DisplayName { get; set; } = "";
         public string Publisher { get; set; } = "";
         public string Description { get; set; } = "";
-        public string MinLibreOfficeVersion { get; set; } = "7.0";
+        public string MinLibreOfficeVersion { get; set; } = "4.0";
         public string MaxLibreOfficeVersion { get; set; } = "";
 
         /// <summary>
@@ -156,14 +156,12 @@ internal static class DescriptionGenerator
         }
 
         // Add LibreOffice version dependencies
-        var dependencyElements = new List<XElement>();
-
         if (!string.IsNullOrEmpty(info.MinLibreOfficeVersion))
         {
             var depAttrs = new List<XAttribute>
             {
-                new XAttribute(DescNs + "name", "LibreOffice-minimal-version"),
-                new XAttribute("value", info.MinLibreOfficeVersion)
+                new XAttribute("value", info.MinLibreOfficeVersion),
+                new XAttribute(DescNs + "name", $"LibreOffice {info.MinLibreOfficeVersion}")
             };
 
             if (!string.IsNullOrEmpty(info.MaxLibreOfficeVersion))
@@ -171,16 +169,13 @@ internal static class DescriptionGenerator
                 depAttrs.Add(new XAttribute(DescNs + "maximum-version", info.MaxLibreOfficeVersion));
             }
 
-            dependencyElements.Add(new XElement(DescNs + "dependencies",
-                new XElement(DescNs + "LibreOffice-minimal-version",
+            elements.Add(new XElement(DescNs + "dependencies",
+                new XElement(DescNs + "OpenOffice.org-minimal-version",
                     depAttrs
                 )
             ));
-        }
 
-        if (dependencyElements.Any())
-        {
-            elements.AddRange(dependencyElements);
+            logger.Debug($"Added dependency: LibreOffice >= {info.MinLibreOfficeVersion}", true);
         }
 
         var doc = new XDocument(

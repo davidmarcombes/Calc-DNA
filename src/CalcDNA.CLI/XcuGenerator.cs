@@ -3,6 +3,7 @@ using System.Xml.Linq;
 using CalcDNA.CLI;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 
 /// <summary>
 /// XCU (XML Configuration) generator for LibreOffice Calc add-ins.
@@ -10,11 +11,12 @@ using System.Linq;
 internal static class XcuGenerator
 {
     private static readonly XNamespace Oor = "http://openoffice.org/2001/registry";
+    private static readonly XNamespace Xml = XNamespace.Xml;
 
     /// <summary>
     /// Build the XCU file content.
     /// </summary>
-    public static string BuildXcu(IEnumerable<AddInClass> addInClasses, Logger logger)
+    public static string BuildXcu(string moduleName, IEnumerable<AddInClass> addInClasses, Logger logger)
     {
         var addInNodes = new List<XElement>();
 
@@ -22,7 +24,7 @@ internal static class XcuGenerator
         {
             try
             {
-                var node = CreateAddInNode(addIn, logger);
+                var node = CreateAddInNode(moduleName, addIn, logger);
                 if (node != null)
                 {
                     addInNodes.Add(node);
@@ -34,9 +36,13 @@ internal static class XcuGenerator
             }
         }
 
+        // IMPORTANT: LibreOffice .xcu files expect elements (node, prop, value) 
+        // to be in the empty namespace, but attributes (name, op) to be in the 'oor' namespace.
+        // The root component-data element IS in the 'oor' namespace.
         var doc = new XDocument(
             new XDeclaration("1.0", "UTF-8", null),
             new XElement(Oor + "component-data",
+                new XAttribute(XNamespace.Xmlns + "oor", Oor.NamespaceName),
                 new XAttribute(Oor + "name", "CalcAddIns"),
                 new XAttribute(Oor + "package", "org.openoffice.Office"),
                 new XElement("node", new XAttribute(Oor + "name", "AddInInfo"),
@@ -48,9 +54,11 @@ internal static class XcuGenerator
         return doc.ToString();
     }
 
-    private static XElement? CreateAddInNode(AddInClass addIn, Logger logger)
+    private static XElement? CreateAddInNode(string moduleName, AddInClass addIn, Logger logger)
     {
-        string implementationName = addIn.Type.FullName ?? addIn.Type.Name;
+        // Use the UNO module name (sanitized) + class name (sanitized)
+        string sanitizedClassName = SanitizeIdentifier(addIn.Type.Name);
+        string implementationName = $"{moduleName}.{sanitizedClassName}";
 
         var functionNodes = new List<XElement>();
         foreach (var method in addIn.Methods)
@@ -78,7 +86,7 @@ internal static class XcuGenerator
 
     private static XElement CreateFunctionNode(MethodInfo method, Logger logger)
     {
-        // Extract attribute data (using dynamic or casting since MLC is used)
+        // Extract attribute data
         var funcAttr = method.GetCustomAttributesData()
             .FirstOrDefault(a => a.AttributeType.Name == "CalcFunctionAttribute");
 
@@ -89,13 +97,11 @@ internal static class XcuGenerator
 
         if (funcAttr != null)
         {
-            // Check constructor arguments (if name was passed via constructor)
             if (funcAttr.ConstructorArguments.Count > 0)
             {
                 displayName = funcAttr.ConstructorArguments[0].Value?.ToString() ?? displayName;
             }
 
-            // Check named arguments for all properties
             foreach (var namedArg in funcAttr.NamedArguments)
             {
                 switch (namedArg.MemberName)
@@ -116,21 +122,23 @@ internal static class XcuGenerator
             }
         }
 
+        string sanitizedMethodName = SanitizeIdentifier(method.Name);
+
         var node = new XElement("node",
-            new XAttribute(Oor + "name", method.Name),
+            new XAttribute(Oor + "name", sanitizedMethodName),
             new XAttribute(Oor + "op", "replace"),
             new XElement("prop", new XAttribute(Oor + "name", "DisplayName"),
-                new XElement("value", displayName)),
+                new XElement("value", new XAttribute(Xml + "lang", "en"), displayName)),
             new XElement("prop", new XAttribute(Oor + "name", "Description"),
-                new XElement("value", desc)),
+                new XElement("value", new XAttribute(Xml + "lang", "en"), desc)),
             new XElement("prop", new XAttribute(Oor + "name", "Category"),
-                new XElement("value", category))
+                new XElement("value", new XAttribute(Xml + "lang", "en"), category))
         );
 
         if (!string.IsNullOrEmpty(compatName))
         {
             node.Add(new XElement("prop", new XAttribute(Oor + "name", "CompatibilityName"),
-                new XElement("value", compatName)));
+                new XElement("value", new XAttribute(Xml + "lang", "en"), compatName)));
         }
 
         node.Add(new XElement("node", new XAttribute(Oor + "name", "Parameters"),
@@ -149,13 +157,11 @@ internal static class XcuGenerator
 
         if (paramAttr != null)
         {
-             // Check constructor arguments
             if (paramAttr.ConstructorArguments.Count > 0)
             {
                 displayName = paramAttr.ConstructorArguments[0].Value?.ToString() ?? displayName;
             }
 
-            // Check named arguments
             foreach (var namedArg in paramAttr.NamedArguments)
             {
                 switch (namedArg.MemberName)
@@ -170,15 +176,56 @@ internal static class XcuGenerator
             }
         }
 
-        string paramInternalName = param.Name ?? $"arg{param.Position}";
+        string sanitizedParamName = SanitizeIdentifier(param.Name ?? $"arg{param.Position}");
 
         return new XElement("node",
-            new XAttribute(Oor + "name", paramInternalName),
+            new XAttribute(Oor + "name", sanitizedParamName),
             new XAttribute(Oor + "op", "replace"),
             new XElement("prop", new XAttribute(Oor + "name", "DisplayName"),
-                new XElement("value", displayName)),
+                new XElement("value", new XAttribute(Xml + "lang", "en"), displayName)),
             new XElement("prop", new XAttribute(Oor + "name", "Description"),
-                new XElement("value", desc))
+                new XElement("value", new XAttribute(Xml + "lang", "en"), desc))
         );
+    }
+
+    private static readonly HashSet<string> ReservedWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "module", "interface", "service", "any", "boolean", "byte", "char",
+        "double", "enum", "exception", "FALSE", "float", "hyper", "long",
+        "octet", "sequence", "short", "string", "struct", "TRUE", "type",
+        "typedef", "union", "unsigned", "void", "in", "out", "inout"
+    };
+
+    private static string SanitizeIdentifier(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return "id";
+
+        var sb = new StringBuilder();
+        foreach (char c in name)
+        {
+            if (char.IsLetterOrDigit(c) || c == '_')
+            {
+                sb.Append(c);
+            }
+            else
+            {
+                sb.Append('_');
+            }
+        }
+
+        string result = sb.ToString().Trim('_');
+        if (string.IsNullOrEmpty(result)) result = "id";
+
+        if (char.IsDigit(result[0]))
+        {
+            result = "_" + result;
+        }
+
+        if (ReservedWords.Contains(result))
+        {
+            result = "_" + result;
+        }
+
+        return result;
     }
 }

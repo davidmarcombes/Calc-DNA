@@ -48,8 +48,8 @@ class Program
         [Option("description", Required = false, HelpText = "Extension description. Used when creating package.")]
         public string? Description { get; set; } = null;
 
-        [Option("min-lo-version", Required = false, HelpText = "Minimum LibreOffice version (e.g., 7.0).", Default = "7.0")]
-        public string MinLibreOfficeVersion { get; set; } = "7.0";
+        [Option("min-lo-version", Required = false, HelpText = "Minimum LibreOffice version (e.g., 4.0).", Default = "4.0")]
+        public string MinLibreOfficeVersion { get; set; } = "4.0";
 
         [Option("update-url", Required = false, HelpText = "URL to update.xml file for automatic update checking.")]
         public string? UpdateUrl { get; set; } = null;
@@ -251,7 +251,7 @@ class Program
         // 6. Generate XCU file
         try
         {
-            string xcuContent = XcuGenerator.BuildXcu(addInClasses, logger);
+            string xcuContent = XcuGenerator.BuildXcu(addinName, addInClasses, logger);
             File.WriteAllText(Path.Combine(outputDir, $"{addinName}.xcu"), xcuContent);
             logger.Success($"Generated {addinName}.xcu");
         }
@@ -326,7 +326,7 @@ class Program
             DisplayName = addinName,
             Publisher = "",
             Description = $"{addinName} - LibreOffice Calc Add-in created with Calc-DNA",
-            MinLibreOfficeVersion = "7.0",
+            MinLibreOfficeVersion = "4.0",
             MaxLibreOfficeVersion = ""
         };
 
@@ -418,7 +418,7 @@ class Program
             logger.Debug($"Description overridden by command line: {options.Description}", verbose);
         }
 
-        if (!string.IsNullOrEmpty(options.MinLibreOfficeVersion) && options.MinLibreOfficeVersion != "7.0")
+        if (!string.IsNullOrEmpty(options.MinLibreOfficeVersion) && options.MinLibreOfficeVersion != "4.0")
         {
             metadata.MinLibreOfficeVersion = options.MinLibreOfficeVersion;
             logger.Debug($"MinLibreOfficeVersion overridden by command line: {options.MinLibreOfficeVersion}", verbose);

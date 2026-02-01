@@ -61,13 +61,10 @@ internal static class IdlGenerator
 
             sb.AppendLine("    };");
 
+            // Modern UNO IDL uses single-interface services
             string implementationName = SanitizeIdentifier(addIn.Type.Name);
             sb.AppendLine();
-            sb.AppendLine($"    service {implementationName} {{");
-            sb.AppendLine($"        interface {interfaceName};");
-            sb.AppendLine("        interface com::sun::star::sheet::XAddIn;");
-            sb.AppendLine("        interface com::sun::star::lang::XServiceInfo;");
-            sb.AppendLine("    };");
+            sb.AppendLine($"    service {implementationName} : {interfaceName};");
         }
 
         sb.AppendLine("};");
