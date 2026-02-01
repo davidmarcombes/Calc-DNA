@@ -87,6 +87,11 @@ public class CalcWrapperGenerator : IIncrementalGenerator
             GenerateMethodWrapper(sb, method);
         }
 
+        foreach (var method in info.Methods)
+        {
+            GeneratePyMethodWrapper(sb, method);
+        }
+
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
@@ -125,6 +130,47 @@ public class CalcWrapperGenerator : IIncrementalGenerator
         var callCode = $"{methodName}({string.Join(", ", callArgs)})";
         var returnCode = WrapperTypeMapping.GetReturnMarshalingCode(method, callCode);
         
+        sb.AppendLine($"                {returnCode}");
+        sb.AppendLine("            }");
+        sb.AppendLine("            catch (Exception ex)");
+        sb.AppendLine("            {");
+        sb.AppendLine($"                throw new Exception($\"Error calling {methodName}: {{ex.Message}}\", ex);");
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
+    }
+
+    private static void GeneratePyMethodWrapper(StringBuilder sb, IMethodSymbol method)
+    {
+        var methodName = method.Name;
+        var returnType = WrapperTypeMapping.MapReturnTypeToWrapper(method.ReturnType);
+
+        var parametersList = method.Parameters.Select(p =>
+            $"{WrapperTypeMapping.MapTypeToPyWrapper(p.Type, WrapperTypeMapping.IsOptionalParameter(p))} {p.Name}");
+        var parameters = string.Join(", ", parametersList);
+
+        sb.AppendLine($"        public static {returnType} {methodName}_PyWrapper({parameters})");
+        sb.AppendLine("        {");
+        sb.AppendLine("            try");
+        sb.AppendLine("            {");
+
+        var callArgs = new List<string>();
+        foreach (var parameter in method.Parameters)
+        {
+            if (WrapperTypeMapping.NeedsMarshaling(parameter))
+            {
+                var marshaledName = $"marshaled_{parameter.Name}";
+                sb.AppendLine($"                var {marshaledName} = {WrapperTypeMapping.GetPyMarshalingCode(parameter)};");
+                callArgs.Add(marshaledName);
+            }
+            else
+            {
+                callArgs.Add(parameter.Name);
+            }
+        }
+
+        var callCode = $"{methodName}({string.Join(", ", callArgs)})";
+        var returnCode = WrapperTypeMapping.GetPyReturnMarshalingCode(method, callCode);
+
         sb.AppendLine($"                {returnCode}");
         sb.AppendLine("            }");
         sb.AppendLine("            catch (Exception ex)");

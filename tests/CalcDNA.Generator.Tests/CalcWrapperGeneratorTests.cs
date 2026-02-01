@@ -83,6 +83,17 @@ public class CalcWrapperGeneratorTests
             "                throw new Exception($\"Error calling Add: {ex.Message}\", ex);\n" +
             "            }\n" +
             "        }\n" +
+            "        public static double Add_PyWrapper(double a, double b)\n" +
+            "        {\n" +
+            "            try\n" +
+            "            {\n" +
+            "                return Add(a, b);\n" +
+            "            }\n" +
+            "            catch (Exception ex)\n" +
+            "            {\n" +
+            "                throw new Exception($\"Error calling Add: {ex.Message}\", ex);\n" +
+            "            }\n" +
+            "        }\n" +
             "    }\n" +
             "}\n";
 

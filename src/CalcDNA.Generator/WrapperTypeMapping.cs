@@ -188,6 +188,218 @@ public static class WrapperTypeMapping
         return $"return {callCode};";
     }
 
+    // ─── Python Wrapper Mapping ────────────────────────────────────────
+    // Sequence types become 'object' because pythonnet passes Python
+    // lists/tuples as generic IEnumerable, not typed arrays.
+    // Scalar optional/nullable unwrappers reuse UnoMarshal (identical logic).
+    // Return marshaling uses PyMarshal.ToPy* (preserves null, no DBNull).
+
+    public static string MapTypeToPyWrapper(ITypeSymbol typeSymbol, bool optional)
+    {
+        if (optional)
+            return "object?";
+
+        if (typeSymbol.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+            return "object?";
+
+        // Sequences: 'object' — pythonnet iterables
+        if (typeSymbol is IArrayTypeSymbol)
+            return "object";
+
+        if (typeSymbol.Name == "CalcRange" &&
+            typeSymbol.ContainingNamespace?.ToDisplayString() == "CalcDNA.Runtime")
+            return "object";
+
+        if (typeSymbol is INamedTypeSymbol { IsGenericType: true } listType &&
+            listType.ContainingNamespace?.ToDisplayString() == "System.Collections.Generic" &&
+            (listType.Name is "List" or "IEnumerable" or "ICollection" or "IList"))
+            return "object";
+
+        // DateTime, PODs, fallback: identical to UNO
+        if (typeSymbol.Name == "DateTime" &&
+            typeSymbol.ContainingNamespace?.ToDisplayString() == "System")
+            return "double";
+
+        return typeSymbol.SpecialType switch
+        {
+            SpecialType.System_Boolean => "bool",
+            SpecialType.System_Byte => "byte",
+            SpecialType.System_SByte => "short",
+            SpecialType.System_Int16 => "short",
+            SpecialType.System_Int32 => "int",
+            SpecialType.System_Int64 => "long",
+            SpecialType.System_Single => "float",
+            SpecialType.System_Double => "double",
+            SpecialType.System_String => "string",
+            _ => "object?"
+        };
+    }
+
+    public static string GetPyMarshalingCode(IParameterSymbol parameter)
+    {
+        if (IsOptionalParameter(parameter))
+            return GetPyOptionalMarshalingCode(parameter);
+
+        if (parameter.Type.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+            return GetPyNullableMarshalingCode(parameter);
+
+        return GetPyComplexTypeMarshalingCode(parameter);
+    }
+
+    public static string GetPyReturnMarshalingCode(IMethodSymbol method, string callCode)
+    {
+        var type = method.ReturnType;
+
+        if (type.SpecialType == SpecialType.System_Void)
+            return $"{callCode};";
+
+        if (type.SpecialType == SpecialType.System_DateTime)
+            return $"return {callCode}.ToOADate();";
+
+        if (type is IArrayTypeSymbol arrayType)
+        {
+            if (arrayType.Rank == 1)
+                return $"return PyMarshal.ToPy1DArray({callCode});";
+            else
+                return $"return PyMarshal.ToPy2DArray({callCode});";
+        }
+
+        if (type.Name == "CalcRange" &&
+            type.ContainingNamespace?.ToDisplayString() == "CalcDNA.Runtime")
+            return $"return PyMarshal.ToPy2DArray({callCode});";
+
+        if (type is INamedTypeSymbol { IsGenericType: true } namedType)
+        {
+            var name = namedType.Name;
+            var ns = namedType.ContainingNamespace?.ToDisplayString();
+            if (ns == "System.Collections.Generic" && (name is "List" or "IEnumerable" or "ICollection" or "IList"))
+                return $"return PyMarshal.ToPy1DArray({callCode});";
+        }
+
+        return $"return {callCode};";
+    }
+
+    private static string GetPyOptionalMarshalingCode(IParameterSymbol parameter)
+    {
+        var code = GetPyComplexOptionalTypeMarshalingCode(parameter);
+        if (code != null) return code;
+        return GetOptionalMarshalingCode(parameter);
+    }
+
+    private static string GetPyNullableMarshalingCode(IParameterSymbol parameter)
+    {
+        var code = GetPyComplexNullableTypeMarshalingCode(parameter);
+        if (code != null) return code;
+        return GetNullableMarshalingCode(parameter);
+    }
+
+    private static string GetPyComplexTypeMarshalingCode(IParameterSymbol parameter)
+    {
+        var typeSymbol = parameter.Type;
+        var paramName = parameter.Name;
+
+        if (typeSymbol.SpecialType == SpecialType.System_DateTime)
+            return $"UnoMarshal.ToDateTime({paramName})";
+
+        if (typeSymbol is IArrayTypeSymbol arrayType)
+        {
+            var elementTypeName = GetFullTypeName(arrayType.ElementType);
+            return arrayType.Rank switch
+            {
+                1 => $"PyMarshal.To1DArray<{elementTypeName}>({paramName})",
+                2 => $"PyMarshal.To2DArray<{elementTypeName}>({paramName})",
+                _ => throw new NotSupportedException($"Arrays with rank {arrayType.Rank} are not supported.")
+            };
+        }
+
+        if (typeSymbol.Name == "CalcRange" &&
+            typeSymbol.ContainingNamespace?.ToDisplayString() == "CalcDNA.Runtime")
+            return $"PyMarshal.ToCalcRange({paramName})";
+
+        if (typeSymbol is INamedTypeSymbol { IsGenericType: true } listType &&
+            listType.Name == "List" &&
+            listType.ContainingNamespace?.ToDisplayString() == "System.Collections.Generic")
+        {
+            var elementTypeName = GetFullTypeName(listType.TypeArguments[0]);
+            return $"PyMarshal.ToList<{elementTypeName}>({paramName})";
+        }
+
+        throw new NotSupportedException($"Marshaling for type '{typeSymbol.ToDisplayString()}' is not supported.");
+    }
+
+    private static string? GetPyComplexOptionalTypeMarshalingCode(IParameterSymbol parameter)
+    {
+        var typeSymbol = parameter.Type;
+        var paramName = parameter.Name;
+        var defaultLiteral = FormatDefaultValue(parameter);
+
+        if (typeSymbol is INamedTypeSymbol { IsGenericType: true } nullableType &&
+            nullableType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+            typeSymbol = nullableType.TypeArguments[0];
+
+        if (typeSymbol is IArrayTypeSymbol arrayType)
+        {
+            var elementTypeName = GetFullTypeName(arrayType.ElementType);
+            return arrayType.Rank switch
+            {
+                1 => $"PyMarshal.UnwrapOptional1DArray<{elementTypeName}>({paramName}, {defaultLiteral})",
+                2 => $"PyMarshal.UnwrapOptional2DArray<{elementTypeName}>({paramName}, {defaultLiteral})",
+                _ => throw new NotSupportedException($"Optional arrays with rank {arrayType.Rank} are not supported.")
+            };
+        }
+
+        if (typeSymbol.Name == "CalcRange" &&
+            typeSymbol.ContainingNamespace?.ToDisplayString() == "CalcDNA.Runtime")
+            return $"PyMarshal.UnwrapOptionalCalcRange({paramName}, {defaultLiteral})";
+
+        if (typeSymbol is INamedTypeSymbol { IsGenericType: true } listType &&
+            listType.Name == "List" &&
+            listType.ContainingNamespace?.ToDisplayString() == "System.Collections.Generic")
+        {
+            var elementTypeName = GetFullTypeName(listType.TypeArguments[0]);
+            return $"PyMarshal.UnwrapOptionalList<{elementTypeName}>({paramName}, {defaultLiteral})";
+        }
+
+        return null;
+    }
+
+    private static string? GetPyComplexNullableTypeMarshalingCode(IParameterSymbol parameter)
+    {
+        var typeSymbol = parameter.Type;
+        var paramName = parameter.Name;
+
+        if (typeSymbol is INamedTypeSymbol { IsGenericType: true } nullableType &&
+            nullableType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+            typeSymbol = nullableType.TypeArguments[0];
+
+        if (typeSymbol is IArrayTypeSymbol arrayType)
+        {
+            var elementTypeName = GetFullTypeName(arrayType.ElementType);
+            return arrayType.Rank switch
+            {
+                1 => $"PyMarshal.UnwrapNullable1DArray<{elementTypeName}>({paramName})",
+                2 => $"PyMarshal.UnwrapNullable2DArray<{elementTypeName}>({paramName})",
+                _ => throw new NotSupportedException($"Nullable arrays with rank {arrayType.Rank} are not supported.")
+            };
+        }
+
+        if (typeSymbol.Name == "CalcRange" &&
+            typeSymbol.ContainingNamespace?.ToDisplayString() == "CalcDNA.Runtime")
+            return $"PyMarshal.UnwrapNullableCalcRange({paramName})";
+
+        if (typeSymbol is INamedTypeSymbol { IsGenericType: true } listType &&
+            listType.Name == "List" &&
+            listType.ContainingNamespace?.ToDisplayString() == "System.Collections.Generic")
+        {
+            var elementTypeName = GetFullTypeName(listType.TypeArguments[0]);
+            return $"PyMarshal.UnwrapNullableList<{elementTypeName}>({paramName})";
+        }
+
+        return null;
+    }
+
+    // ─── UNO Wrapper Private Helpers ────────────────────────────────────
+
     private static string GetOptionalMarshalingCode(IParameterSymbol parameter)
     {
         // Check for complex optional types first

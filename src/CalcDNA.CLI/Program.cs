@@ -56,6 +56,9 @@ class Program
 
         [Option("release-notes-url", Required = false, HelpText = "URL to release notes for this version.")]
         public string? ReleaseNotesUrl { get; set; } = null;
+
+        [Option("python", Required = false, HelpText = "Generate Python UNO bridge via pythonnet instead of .NET bridge.")]
+        public bool PythonMode { get; set; } = false;
     }
 
     /// <summary>
@@ -295,7 +298,7 @@ class Program
         {
             try
             {
-                CreateOxtPackage(assemblyPath, outputDir, addinName, rdbPath, o, logger, verbose, assembly);
+                CreateOxtPackage(assemblyPath, outputDir, addinName, rdbPath, o, logger, verbose, assembly, addInClasses);
             }
             catch (Exception ex)
             {
@@ -450,7 +453,8 @@ class Program
         Options options,
         Logger logger,
         bool verbose,
-        Assembly assembly)
+        Assembly assembly,
+        List<AddInClass> addInClasses)
     {
         logger.Info("Creating OXT package...");
 
@@ -516,7 +520,9 @@ class Program
             RdbFilePath = rdbPath,
             TargetFramework = targetFramework,
             OutputPath = Path.Combine(outputDir, $"{addinName}.oxt"),
-            ExtensionInfo = extensionInfo
+            ExtensionInfo = extensionInfo,
+            PythonMode = options.PythonMode,
+            AddInClasses = addInClasses
         };
 
         // Create the package

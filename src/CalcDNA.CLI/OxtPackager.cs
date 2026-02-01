@@ -58,6 +58,17 @@ internal static class OxtPackager
         /// Output path for the .oxt file.
         /// </summary>
         public string OutputPath { get; set; } = "";
+
+        /// <summary>
+        /// When true, generates a Python UNO bridge script instead of using the .NET bridge.
+        /// DLLs are loaded by pythonnet at runtime; LO invokes the Python service via pythonloader.
+        /// </summary>
+        public bool PythonMode { get; set; } = false;
+
+        /// <summary>
+        /// Add-in classes (required when PythonMode is true, for Python script generation).
+        /// </summary>
+        public List<AddInClass> AddInClasses { get; set; } = new();
     }
 
     /// <summary>
@@ -146,12 +157,25 @@ internal static class OxtPackager
             assemblyFiles.Add(depsJsonPath);
         }
 
+        // In Python mode, generate the UNO service bridge script
+        string? pythonScriptFile = null;
+        if (config.PythonMode)
+        {
+            string assemblyFileName = Path.GetFileName(config.MainAssemblyPath);
+            string pythonScript = PythonUnoServiceGenerator.BuildPythonScript(
+                config.AddInName, assemblyFileName, config.AddInClasses, logger);
+            pythonScriptFile = $"{config.AddInName}.py";
+            File.WriteAllText(Path.Combine(tempDir, pythonScriptFile), pythonScript);
+            logger.Debug($"Generated: {pythonScriptFile}", true);
+        }
+
         // Generate manifest.xml
         logger.Debug("Generating manifest.xml...", true);
         string manifestContent = ManifestGenerator.BuildManifest(
             config.AddInName,
             assemblyFiles.Select(Path.GetFileName).Where(f => f != null).Cast<string>(),
-            logger
+            logger,
+            pythonScriptFile
         );
         File.WriteAllText(Path.Combine(metaInfDir, "manifest.xml"), manifestContent);
 

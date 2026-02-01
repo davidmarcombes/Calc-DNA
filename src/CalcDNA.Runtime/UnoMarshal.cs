@@ -264,7 +264,7 @@ public static class UnoMarshal
     /// Checks if a value represents an empty/missing UNO value.
     /// In UNO, empty cells can be null, DBNull, or a special Empty type.
     /// </summary>
-    private static bool IsEmpty(object? value)
+    internal static bool IsEmpty(object? value)
     {
         if (value is null or DBNull or System.Reflection.Missing)
             return true;
